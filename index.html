@@ -31,7 +31,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .talk p { margin: 0; }
 .talk .tell { color: var(--clue); font-size: .92rem; }
 .talk .act { color: var(--muted); font-size: .92rem; }
-.talk .mind { color: #e8c98a; font-size: .95rem; }  /* 主角的心聲 */
+.talk .mind { color: #e8c98a; font-size: .95rem; font-style: italic; }  /* 主角的心聲 */
+.talk .say { color: var(--ink); font: 700 1rem/1.5 var(--display); }  /* 說出口的話（「」開頭）：白色粗明體；沒有「」的敘述改灰綠，跟話分開 */
 
 .scene { position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #000; }
 .scene canvas { width: 100%; height: 100%; display: block; }
@@ -115,20 +116,37 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 @keyframes popio { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); } 20% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.97); } }
 @media (prefers-reduced-motion: reduce) { .pop { animation: popfade 2s linear forwards; } @keyframes popfade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } } }
 /* 字卡（B 版：第一層進第二層時，主角心聲跳一張卡，點一下關掉） */
-.titlecard { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(4, 14, 10, .82); padding: 24px; animation: tcin .4s ease-out; cursor: pointer; }
-.titlecard > div { max-width: 420px; border: 2px solid #e8c98a; border-radius: 14px; background: rgba(6, 22, 16, .96); padding: 22px 22px 14px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
-.titlecard p { margin: 0; color: #e8c98a; font: 700 1.15rem/1.65 var(--display); }
-.titlecard small { color: var(--muted); text-align: center; font-size: .78rem; }
-.titlecard p.act { color: var(--ink); font: 400 1rem/1.7 var(--body); }
-.titlecard p.line { color: var(--ink); font: 700 1.05rem/1.6 var(--display); }
-.titlecard .choices { display: grid; gap: 10px; margin-top: 4px; }
-.titlecard .choices button { border: 2px solid var(--brass); background: rgba(0,0,0,.25); color: var(--ink); border-radius: 12px; padding: 12px 10px; font: 900 1.05rem/1.3 var(--display); letter-spacing: .05em; }
+.titlecard { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(4, 14, 10, .82); padding: max(12px, env(safe-area-inset-top, 0px)) 14px max(12px, env(safe-area-inset-bottom, 0px)); animation: tcin .4s ease-out; cursor: pointer; }
+.titlecard > div { width: 100%; max-width: 420px; border: 2px solid #e8c98a; border-radius: 14px; background: rgba(6, 22, 16, .96); padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+/* 2026-11-09 三種聲音分開：心聲（括號）＝暖金色細字；旁白／提示＝灰綠小字；說出口的話＝白色粗明體，前面標誰說的 */
+.titlecard p { margin: 0; color: #e8c98a; font: italic 400 1rem/1.65 var(--body); }  /* 心聲：斜體（2026-11-09 使用者定） */
+.titlecard small { color: var(--muted); text-align: center; font-size: .75rem; }
+.titlecard p.act { color: var(--muted); font: 400 .9rem/1.65 var(--body); }
+.titlecard p.line, .titlecard p.you { color: var(--ink); font: 700 1.12rem/1.55 var(--display); }
+.titlecard .spk { display: inline-block; vertical-align: .15em; margin-right: 8px; padding: 0 7px; border-radius: 5px; background: var(--brass); color: var(--felt-lo); font: 700 .68rem/1.6 var(--body); letter-spacing: .12em; }
+.titlecard p.you .spk { background: var(--clue); }
+.titlecard .choices { display: grid; gap: 8px; margin-top: 2px; position: sticky; bottom: -12px; padding: 6px 0 12px; margin-bottom: -12px; background: rgba(6, 22, 16, .98); }  /* 選項黏在卡片底部，內容再長也看得到兩個按鈕 */
+.titlecard .choices button { border: 2px solid var(--brass); background: rgba(0,0,0,.25); color: var(--ink); border-radius: 12px; padding: 10px; font: 900 1.02rem/1.3 var(--display); letter-spacing: .05em; }
 .titlecard.choose { cursor: default; }
 .titlecard.chain { animation: none; }            /* 接續的字卡：背景不再淡入，免得兩張之間露出遊戲畫面閃一下 */
 .titlecard.chain > div { animation: tcin .3s ease-out; }
-.titlecard > div { max-height: calc(100dvh - 48px); overflow-y: auto; }
-.titlecard img.tcimg { width: 100%; max-height: 42dvh; object-fit: cover; border-radius: 8px; display: block; flex: none; }
+.titlecard > div { max-height: calc(100dvh - 24px); overflow-y: auto; }
+.titlecard img.tcimg { width: 100%; max-height: 30dvh; object-fit: cover; border-radius: 8px; display: block; flex: none; }
 @keyframes tcin { from { opacity: 0; } to { opacity: 1; } }
+/* 結局劇情卡：滿版，圖吃掉上面剩下的高度，文字區固定高度一句一句換 */
+.titlecard.storycard { padding: 0; place-items: stretch center; }
+.titlecard.storycard > div.story { width: 100%; max-width: 480px; height: 100dvh; max-height: none; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; background: rgba(6, 22, 16, .98); padding: max(12px, env(safe-area-inset-top, 0px)) 16px max(14px, env(safe-area-inset-bottom, 0px)); gap: 14px; justify-content: center; }  /* 圖、字、按鈕整組置中，字貼著圖 */
+.story img.tcimg { flex: none; width: 100%; height: auto; max-height: 58dvh; object-fit: cover; border-radius: 10px; }  /* 圖照原比例放滿寬，不裁掉兩邊 */
+.story-text { flex: none; min-height: 6.6em; display: flex; align-items: center; }
+.story-text p { animation: linein .35s ease-out; font-size: 1.08rem; }
+.story-text p.act { font-size: 1rem; }
+.story-text p.line, .story-text p.you { font-size: 1.2rem; }
+@keyframes linein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.story-tail { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 40px; justify-content: flex-end; }
+.story-tail .choices { position: static; width: 100%; margin: 0; padding: 0; background: none; animation: linein .35s ease-out; }
+.story-tail .dots { display: flex; gap: 6px; }
+.story-tail .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--brass-dim); opacity: .5; }
+.story-tail .dots i.on { background: #e8c98a; opacity: 1; }
 /* 抉擇階段的外框閃爍 */
 .scene.watch { animation: watchblink 1.2s ease-in-out infinite; }
 @keyframes watchblink { 0%, 100% { box-shadow: 0 0 0 3px var(--clue), 0 0 16px rgba(143,195,214,.55); } 50% { box-shadow: 0 0 0 3px rgba(143,195,214,0), 0 0 0 rgba(143,195,214,0); } }
@@ -874,15 +892,41 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       const g0 = G, n = G.round; setTimeout(() => { if (G === g0 && G.round === n && (G.phase === "result" || G.phase === "endwait")) settle(); }, 1600);
     } else settle();
   }
-  const cardLine = (x) => typeof x === "string" ? el("p", {}, x) : el("p", { class: x.c }, x.t);
+  // 字卡一行：字串＝心聲；act＝旁白；line＝木子說的；you＝你說的（後兩種前面標名字）
+  const cardLine = (x) => typeof x === "string" ? el("p", {}, x)
+    : x.c === "line" || x.c === "you" ? el("p", { class: x.c }, el("span", { class: "spk" }, x.c === "you" ? "你" : "木子"), x.t)
+    : el("p", { class: x.c }, x.t);
   const cardImg = (name) => name ? el("img", { class: "tcimg", src: IMG + name + ".webp", alt: "" }) : null;
+  // 2026-11-09 結局劇情卡（有圖的）：滿版，圖固定在上面，文字一句一句點下去輪播，最後一句才出按鈕
+  function storyCard(lines, pic, { after, foot, options, chain } = {}) {
+    if (fast()) { if (options) options[0].fn(); else if (after) after(); return; }
+    let i = 0;
+    const text = el("div", { class: "story-text" }), tail = el("div", { class: "story-tail" });
+    const c = el("div", { class: "titlecard storycard" + (chain ? " chain" : ""), role: "dialog", onclick: () => step() },
+      el("div", { class: "story" }, cardImg(pic), text, tail));
+    const last = () => i >= lines.length - 1;
+    const dots = () => el("span", { class: "dots" }, ...lines.map((_, n) => el("i", { class: n === i ? "on" : "" })));
+    function show() {
+      text.replaceChildren(cardLine(lines[i]));
+      if (last() && options) { c.classList.add("choose"); tail.replaceChildren(el("div", { class: "choices" }, ...options.map((o) => el("button", { onclick: (e) => { e.stopPropagation(); c.remove(); o.fn(); } }, o.label)))); }
+      else tail.replaceChildren(dots(), el("small", {}, last() ? (foot || "點一下繼續") : "點一下繼續"));
+    }
+    function step() {
+      if (!last()) { i += 1; show(); return; }
+      if (options) return;  // 最後一句：一定要選
+      c.remove(); if (after) after();
+    }
+    show(); document.body.append(c);
+  }
   function showTitleCard(lines, after, foot, pic, chain) {
+    if (pic) return storyCard(lines, pic, { after, foot, chain });
     if (fast()) { if (after) after(); return; }
     const c = el("div", { class: "titlecard" + (chain ? " chain" : ""), role: "dialog", onclick: () => { c.remove(); if (after) after(); } }, el("div", {}, cardImg(pic), ...lines.map(cardLine), el("small", {}, foot || "點一下繼續")));
     document.body.append(c);
   }
   // 選項字卡：點背景不會關，一定要選一個
   function showChoiceCard(lines, options, pic, chain) {
+    if (pic) return storyCard(lines, pic, { options, chain });
     if (fast()) { options[0].fn(); return; }
     const c = el("div", { class: "titlecard choose" + (chain ? " chain" : ""), role: "dialog" }, el("div", {}, cardImg(pic), ...lines.map(cardLine),
       el("div", { class: "choices" }, ...options.map((o) => el("button", { onclick: () => { c.remove(); o.fn(); } }, o.label)))));
@@ -1111,7 +1155,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
   function renderTalk() {
     const lines = el("div", { class: "lines" });
-    G.lines.slice(-3).forEach((l) => lines.append(el("p", { class: l.c }, l.t)));
+    // 2026-11-09：牌桌上「line」同時裝了敘述跟木子的話，分不出來 → 「」開頭的算說話，其他算旁白（說明頁照舊）
+    const cls = (l) => l.c !== "line" || G.phase === "intro" ? l.c : String(l.t).startsWith("「") ? "say" : "act";
+    G.lines.slice(-3).forEach((l) => lines.append(el("p", { class: cls(l) }, l.t)));
     if (G.note && (G.phase === "result" || G.phase === "endwait")) lines.append(el("p", { class: "act" }, G.note));
     // 說明時：右上角「N / 16 下一步」；「跳過說明」放最下面一排正中間（2026-11-09 使用者加跳過，按了直接坐下開始玩）
     const tab = G.phase === "intro" && fullIntro() && G.introIdx < INTRO.length - 1
@@ -1250,7 +1296,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const ENDINGS = {
     pay: { hold: "expr-nostalgia", pic: "end-pay", lines: [
       { c: "act", t: "你鬆開她的手腕。" },
-      { c: "line", t: "「賠錢，這件事就到這裡。」" },
+      { c: "you", t: "「賠錢，這件事就到這裡。」" },
       { c: "act", t: "木子沒說話，從抽屜裡數出一疊籌碼推過來，比你押的還多。" },
       { c: "line", t: "「……算你有良心。」" },
       { c: "act", t: "她把骰盅收回抽屜，盅底朝下，放得很慢。" },
@@ -1258,9 +1304,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     ] },
     expose: { hold: "hand-grab-shamed", pic: "end-expose", lines: [
       { c: "act", t: "你沒有鬆手，抓著她的手腕舉起來，對整間麻將館喊。" },
-      { c: "line", t: "「大家看清楚，她的右手！」" },
+      { c: "you", t: "「大家看清楚，她的右手！」" },
       { c: "act", t: "洗牌聲一桌一桌停下來。有人站起來，有人趕快把剛贏的錢塞回口袋。" },
-      { c: "act", t: "你把那罐台啤翻過來，讓所有人看罐底那顆按鈕，再按一下。天花板的燈管閃了。" },
+      { c: "act", t: "你把那罐台啤翻過來，讓所有人看鋁箔紙底下那顆按鈕，再按一下。天花板的燈管閃了。" },
       { c: "line", t: "「……你滿意了？」" },
     ], next: { pic: "end-cloth", lines: [
       { c: "act", t: "隔天晚上，麻將館照樣客滿，洗牌聲沒停過。" },
@@ -1281,7 +1327,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       showTitleCard([{ c: "act", t: "她桌上的籌碼一個都不剩。她把空盅推給你。" }, { c: "line", t: "「……明天再來。」" }, { c: "act", t: money }], again, "點一下再賭一局"); return;
     }
     // 啤酒罐上的閃燈按鈕：說明和提示都不講，破關這裡才揭露（2026-11-09 使用者定）
-    showChoiceCard(["（抓到了。燈暗下去的那一下，她的右手就扶在盅上。）", "（我拿起她那罐台啤。罐底黏著一顆小小的無線按鈕。）", "（她舉罐喝酒時，拇指偷按一下，天花板那根燈管就閃。有時候是真的要動手，有時候只是在騙我。）", { c: "act", t: "接下來，你要怎麼做？" }], [
+    showChoiceCard(["（抓到了。燈暗下去的那一下，她的右手就扶在盅上。）", "（我拿起她那罐台啤翻過來。罐底貼了一層鋁箔紙，撕開，底下夾著一顆小小的無線按鈕。）", "（她舉罐喝酒時，拇指偷按一下，天花板那根燈管就閃。有時候是真的要動手，有時候只是在騙我。）", { c: "act", t: "接下來，你要怎麼做？" }], [
       { label: "讓她賠錢了事", fn: () => ending("pay") },
       { label: "把她的手法公諸於世", fn: () => ending("expose") },
     ], "end-reveal");
@@ -1387,7 +1433,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     requestAnimationFrame(loop);
     ["end-reveal", "end-pay", "end-expose", "end-cloth"].forEach((n) => { const i = new Image(); i.src = IMG + n + ".webp"; });  // 結尾圖背景預載
     window.__G = () => G;
-    window.__B = { record: (fail) => showRecord(fail), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, zoom: () => zoomLevel(performance.now()), S: () => S };
+    window.__B = { record: (fail) => showRecord(fail), endCard: () => endCard(), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, zoom: () => zoomLevel(performance.now()), S: () => S };
     window.__fn = { newRound, placeBet, openCup, grab, swap, swapStop, swapZones, fresh: () => { G = fresh(); }, setX: (x) => { G.swapT0 = performance.now() - x / swapZones().speed * 1000; } };
   }
   boot();
