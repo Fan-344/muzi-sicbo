@@ -1,0 +1,6 @@
+# 只上傳試玩需要的檔案：遊戲本體、圖、音效
+/*
+!/.gitignore
+!/index.html
+!/img/
+!/sfx/
