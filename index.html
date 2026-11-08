@@ -43,6 +43,36 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .purse .who { font-size: .7rem; color: var(--brass); letter-spacing: .1em; margin-bottom: auto; }
 .purse canvas { width: 40px; height: auto; display: block; }
 .purse .n { font: 700 .9rem var(--body); font-variant-numeric: tabular-nums; }
+.overlay.record .sheet { gap: 14px; padding: 18px 16px 16px; }
+.overlay.record .head { text-align: center; color: var(--brass-dim); font-size: .78rem; letter-spacing: .25em; }
+.overlay.record .badge-title { font: 900 1.9rem/1.25 var(--display); color: var(--brass); text-align: center; letter-spacing: .1em; margin: -6px 0 0; text-wrap: balance; }
+.overlay.record.fail .badge-title { color: var(--red); font-size: 1.6rem; }
+.overlay.record.fail .sheet { border-color: var(--red); }
+.overlay.record .why { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: -4px; }
+.overlay.record .why span { font-size: .8rem; color: var(--ink); border: 1px solid var(--brass-dim); border-radius: 999px; padding: 1px 10px; }
+.overlay.record .nums { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr; background: rgba(0,0,0,.25); border-radius: 10px; padding: 10px 4px; }
+.overlay.record .nums div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.overlay.record .nums div + div { border-left: 1px solid rgba(200,161,74,.2); }
+.overlay.record .nums b { font: 900 1.35rem/1.1 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.overlay.record .nums span { font-size: .72rem; color: var(--muted); }
+.overlay.record .sec { display: flex; align-items: center; gap: 8px; color: var(--brass); font-size: .78rem; letter-spacing: .2em; margin-bottom: -4px; }
+.overlay.record .sec::after { content: ""; flex: 1; height: 1px; background: var(--brass-dim); opacity: .5; }
+.overlay.record ol.path { list-style: none; margin: 0; padding: 0 0 0 4px; }
+.overlay.record ol.path li { position: relative; padding: 0 0 12px 20px; display: flex; flex-direction: column; }
+.overlay.record ol.path li:last-child { padding-bottom: 0; }
+.overlay.record ol.path li::before { content: ""; position: absolute; left: 0; top: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--felt-lo); box-shadow: 0 0 0 2px var(--brass-dim); }
+.overlay.record ol.path li:not(:last-child)::after { content: ""; position: absolute; left: 4px; top: 16px; bottom: 0; width: 1px; background: var(--brass-dim); }
+.overlay.record ol.path li.last::before { background: var(--brass); box-shadow: 0 0 0 2px var(--brass); }
+.overlay.record.fail ol.path li.last::before { background: var(--red); box-shadow: 0 0 0 2px var(--red); }
+.overlay.record ol.path small { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.overlay.record ol.path li.last span { color: var(--brass); font-weight: 700; }
+.overlay.record.fail ol.path li.last span { color: var(--red); }
+.overlay.record .miss { display: flex; flex-direction: column; gap: 4px; }
+.overlay.record .miss .big { font-weight: 700; }
+.overlay.record .miss .row { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); padding-left: 12px; }
+.overlay.record .miss .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.overlay.record .miss .act { font-size: .85rem; margin-top: 2px; }
+.overlay.record .foot { border-top: 1px solid rgba(200,161,74,.25); padding-top: 10px; text-align: center; font-size: .75rem; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
 .purse .wallet { font-size: .62rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .dice { display: flex; gap: 10px; justify-content: center; align-items: center; padding-bottom: 14px; }  /* 底部留「偷看的」「被出千」標籤的位置 */
 .die { width: 54px; height: 54px; border-radius: 11px; background: var(--felt-lo); box-shadow: inset 0 0 0 2px var(--brass-dim); position: relative; }
@@ -211,6 +241,12 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   let wallet = WALLET0;
   try { const v = localStorage.getItem(KEY + "wallet"); if (v !== null && !isNaN(+v)) wallet = +v; } catch (e) {}
   function saveWallet() { try { localStorage.setItem(KEY + "wallet", String(wallet)); } catch (e) {} }
+  // 破關紀錄（2026-11-09 使用者定）：這一輪從開始玩到破關的統計，破關後給一頁讓玩家截圖
+  const newRun = () => ({ start: Date.now(), matches: 0, rounds: 0, ms: 0, reach2: null, reach3: null, kicked: { 1: { wrong: 0, early: 0, late: 0 }, 2: { wrong: 0, early: 0, late: 0 }, 3: { wrong: 0, early: 0, late: 0 } }, halves: 0, leaves: 0, broke: 0, clears: 0, skipped: false, ending: null });
+  let RUN = newRun();
+  try { const v = JSON.parse(localStorage.getItem(KEY + "run") || "null"); if (v && v.kicked) RUN = v; } catch (e) {}
+  function saveRun() { try { localStorage.setItem(KEY + "run", JSON.stringify(RUN)); } catch (e) {} }
+  const here = () => ({ match: RUN.matches, round: RUN.rounds });
   // 第一層的鏡頭（2026-11-09 改）：押完之後，她每做一個動作，鏡頭就推到做動作的那隻手，做完拉回全景。
   // 656 座標的正方形框。比劃（chat）和出千（cheat）用同一個框：框住舉起的左手，扶盅的右手在框外
   // 2026-11-09 第二版：原本框 280（放大約 2.3 倍）太暈，改成 420（約 1.5 倍）；出千的框下緣到 y 460，扶盅的右手在框外
@@ -634,17 +670,17 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (wallet < FEE + 1) return false;
     const bring = Math.min(START, wallet - FEE);
     wallet -= FEE + bring; saveWallet();
-    G.you = bring; G.boughtIn = true;
+    G.you = bring; G.boughtIn = true; RUN.matches += 1; saveRun();
     G.buyLine = { c: "act", t: `你拿 ${bring} 個籌碼上桌。身上還剩 ${wallet} 個。` };
     return true;
   }
   function brokeCard() {
     G.phase = "none"; render();
-    showChoiceCard([{ c: "act", t: "你掏遍口袋，一個籌碼都不剩。" }, "（這張桌子，今天坐不下去了。）"], [{ label: "從頭開始", fn: resetAll }]);
+    showTitleCard([{ c: "act", t: "你掏遍口袋，一個籌碼都不剩。" }, "（這張桌子，今天坐不下去了。）"], () => showRecord(true), "點一下看紀錄");
   }
   async function newRound() {
     if (!G.boughtIn && !buyIn()) { brokeCard(); return; }
-    G.round += 1;
+    G.round += 1; RUN.rounds += 1; G.roundT0 = performance.now(); saveRun();
     G.dice = [rnd(), rnd(), rnd()];
     G.orig = null; G.heard = null; G.bet = null; G.cheated = false; G.changed = -1;
     G.result = null; G.rclass = ""; G.note = ""; G.flipped = []; G.flipAt = 0; G.cheatFlipAt = 0; G.noticed = false; G.act = ""; G.shownTells = [];
@@ -808,6 +844,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
 
   function afterRound() {
+    if (G.roundT0) { RUN.ms += performance.now() - G.roundT0; G.roundT0 = 0; }
     if (G.caution > 0) G.caution -= 1;
     if (G.angry > 0) G.angry -= 1;
     G.susp = clamp(G.susp - 0.03, 0, 1);
@@ -817,11 +854,13 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (G.over === "win" && !G.winBy) G.winBy = "catch";
     if (G.you <= 0 || G.over) {
       gamesPlayed += 1; saveTell();
+      if (G.winBy === "clear") RUN.clears += 1; else if (!G.over) RUN.broke += 1;
       // 算錢：贏＝桌上全部收走；被趕出去＝你桌上的全部沒收；輸光＝本來就沒了
       G.payout = G.over === "win" ? G.you + G.him : 0;
       G.lost = G.over === "lose" ? G.you : 0;
       wallet += G.payout; saveWallet();
     }
+    saveRun();
     G.phase = (G.you <= 0 || G.over) ? "endwait" : "result";
     // 籌碼增減（右邊兩疊、桌上押的那疊）跟彈窗同一拍
     const settle = () => {
@@ -852,7 +891,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (document.querySelector(".titlecard")) return;  // 字卡還開著：先讀完
     const c = G.pendingCard || G.revealCard;
     if (c) { G.pendingCard = null; G.revealCard = null; showTitleCard(c, leaveTable); return; }
-    const back = G.you; wallet += back; saveWallet(); gamesPlayed += 1; saveTell();
+    const back = G.you; wallet += back; saveWallet(); gamesPlayed += 1; saveTell(); RUN.leaves += 1; saveRun();
     G.phase = "none"; S.purseHold = null; S.stake = 0; render();
     showTitleCard([{ c: "act", t: `你把桌上的 ${back} 個籌碼收回口袋，起身離開。身上現在有 ${wallet} 個。` }, { c: "line", t: "「這就走了？」" }], () => { G = fresh(); newRound(); }, "點一下再坐下");
   }
@@ -912,7 +951,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   function shameLater() { setTimeout(() => { if (S.hold === "hand-grab-caught") S.hold = "hand-grab-shamed"; }, fast() ? 0 : 600); }
   async function grab() {
     if (G.phase !== "open" || G.actsDone) return;  // 三個動作做完就不能抓了
-    const st = G.cheated ? G.cheatState : "none";
+    const st = G.cheated ? G.cheatState : "none"; const L0 = layer;
     stopTells();
     G.act = "抓千"; G.phase = "reveal"; S.purseHold = { you: G.you, him: G.him }; render();  // 籌碼先不動，跟彈窗同一拍才變
     const a = G.bet.amt;
@@ -942,7 +981,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       await play([["cup-open", 700]]);
       S.hold = "expr-angry";  // 原本用 expr-suspicious（瀏海亂、沒經過使用者確認），2026-11-09 換成確認過的生氣那張
       settle(sideOf(G.dice) === G.bet.side, a); G.result = (G.rclass === "win" ? "看穿了 +" : "看穿了 −") + a; G.stats.seen = (G.stats.seen || 0) + 1;
-      layer = 3; saveLayer();
+      layer = 3; saveLayer(); RUN.reach3 = RUN.reach3 || here();
       G.lines.push({ c: "line", t: "你按住她扶著骰盅的右手。她手一縮，順勢把盅掀開。" });
       G.lines.push({ c: "line", t: "「……手放開。」" });
       G.revealCard = ["（左手吸引注意這招被我看穿了，她一定會改掉。）", "（她會換個辦法下手，還會故意亂動騙我出手。抓錯一次，我就得滾了。）"];
@@ -950,6 +989,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       // 慢了一步：她已經翻完收手。第一層的話，鏡頭在這時候拉開，第一次看到右手
       S.hold = "hand-grab"; sfx("grab", 0.5);
       const firstReveal = layer === 1;
+      if (firstReveal) { RUN.halves += 1; RUN.reach2 = RUN.reach2 || here(); } else RUN.kicked[L0].late += 1;
       if (firstReveal) { setZoom(0); layer = 2; saveLayer(); }
       render();
       await wait(firstReveal ? 900 : 500);
@@ -973,6 +1013,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       if (firstReveal) G.revealCard = ["（右手？我一直盯著她的左手……）", "（她是故意讓我看左手的。下次不能再被她牽著鼻子走。）"];
     } else {
       S.hold = "expr-angry"; synth("slap", 0.8); sfx("vAngry", 0.7);
+      RUN.kicked[L0][G.cheated ? "early" : "wrong"] += 1;
       if (G.cheated && G.orig) G.dice = G.orig.slice();  // 太早：她還沒翻
       G.diceState = "shown"; render();
       G.result = "抓錯了"; G.rclass = "lose"; G.over = "lose"; G.stats.wrong += 1;
@@ -1074,7 +1115,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     // 說明時：右上角「跳過說明」＋「N / 16 下一步」（2026-11-09 使用者加跳過，按了直接坐下開始玩）
     const tab = G.phase === "intro" && fullIntro() && G.introIdx < INTRO.length - 1
       ? el("div", { class: "tabs" },
-          el("button", { class: "skiptab", onclick: (e) => { e.stopPropagation(); stopTells(); G.demo = null; newRound(); } }, "跳過說明"),
+          el("button", { class: "skiptab", onclick: (e) => { e.stopPropagation(); RUN.skipped = true; saveRun(); stopTells(); G.demo = null; newRound(); } }, "跳過說明"),
           el("button", { class: "nexttab", onclick: (e) => { e.stopPropagation(); nextIntro(); } }, `${G.introIdx + 1} / ${INTRO.length}　下一步 ▶`)) : null;
     const who = G.phase === "intro" && G.lines[0] && G.lines[0].c === "act" ? "旁白" : "木子";
     return el("div", { class: "talk" }, el("span", { class: "who" }, who), tab, lines);  // 固定高度，新句子從底下疊上來，舊的被推出去
@@ -1232,7 +1273,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       : `桌上的籌碼輸光了。身上還剩 ${wallet} 個。`;
     const broke = G.over !== "win" && wallet < FEE + 1;
     if (G.over !== "win") {
-      if (broke) { showChoiceCard([{ c: "act", t: money }, ...END_HINT[layer]], [{ label: "從頭開始", fn: resetAll }]); return; }
+      if (broke) { showTitleCard([{ c: "act", t: money }, ...END_HINT[layer]], () => showRecord(true), "點一下看紀錄"); return; }
       showTitleCard([{ c: "act", t: money }, ...END_HINT[layer]], again, "點一下再賭一局"); return;
     }
     if (G.winBy === "clear") {  // 贏光她桌上的：沒抓到她，所以不揭露、不進破關結尾
@@ -1246,7 +1287,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     function ending(k) {
       const e = ENDINGS[k]; S.hold = e.hold; G.ending = k;
       // 破關後最後一張卡：只放「從頭開始」（清掉三層進度，回到說明第一頁）（2026-11-09 使用者定）
-      const last = (x) => showChoiceCard(x.lines, [{ label: "從頭開始", fn: resetAll }], x.pic, true);
+      RUN.ending = k; RUN.done = Date.now(); saveRun();
+      const last = (x) => showTitleCard(x.lines, showRecord, "點一下看破關紀錄", x.pic, true);  // 最後一張結局卡之後是破關紀錄
       if (e.next) showTitleCard(e.lines, () => last(e.next), "點一下繼續", e.pic, true);
       else last(e);
     }
@@ -1272,8 +1314,54 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
 
   // ---------- 啟動 ----------
+  function showRecord(fail) {  // fail：破產紀錄（2026-11-09 使用者定，失敗也給）
+    // 2026-11-09 第二版：玩家看得懂的白話（稱號＋怎麼來的、這一路的時間軸、失手），拿掉表格和內部用語
+    const r = RUN, k = r.kicked;
+    if (fail && !r.done) { r.done = Date.now(); saveRun(); }
+    const min = Math.max(1, Math.round(r.ms / 60000));
+    const d = new Date(r.done || Date.now()); const pad = (n) => String(n).padStart(2, "0");
+    const sumK = (key) => k[1][key] + k[2][key] + k[3][key];
+    const wrong = sumK("wrong"), early = sumK("early"), late = sumK("late"), kickedTotal = wrong + early + late;
+    // 稱號：破關＝剩下的錢＋結局＋破關把數；破產＝撐了幾把
+    const money = wallet >= 65 ? "闊氣" : wallet >= 50 ? "穩當" : wallet >= 30 ? "手頭緊" : "窮酸";
+    const kind = r.ending === "expose" ? "無情" : "寬容";
+    const noun = r.rounds <= 12 ? "賭神" : r.rounds <= 25 ? "賭俠" : r.rounds <= 30 ? "賭徒" : "賭狗";
+    const title = fail ? (r.rounds <= 10 ? "一下就輸光的冤大頭" : r.rounds <= 20 ? "不服輸的賭客" : r.rounds <= 35 ? "死纏爛打的賭棍" : "輸不完的老賭狗")
+      : `${money}又${kind}的${noun}`;
+    const why = fail ? [`撐了 ${r.rounds} 把`] : [`剩 ${wallet} 個籌碼`, `${r.rounds} 把破關`, r.ending === "expose" ? "把她的手法公諸於世" : "讓她賠錢了事"];
+    // 這一路：只列走到的地方
+    const at = (x) => `第 ${x.match} 場・第 ${x.round} 把`;
+    const steps = [];
+    if (r.reach2) steps.push([at(r.reach2), "發現她其實是用右手翻骰"]);
+    if (r.reach3) steps.push([at(r.reach3), "看穿她的右手，她換了招"]);
+    steps.push([at({ match: r.matches, round: r.rounds }), fail ? "身上的籌碼輸光了" : "當場抓到她"]);
+    // 失手：只寫不是 0 的
+    const kickParts = [[wrong, "抓了她沒出千的"], [early, "抓太早"], [late, "抓太晚"]].filter(([n]) => n);
+    const other = [r.halves && `慢了一步 ${r.halves} 次`, r.leaves && `中途離場 ${r.leaves} 次`, r.broke && `桌上輸光 ${r.broke} 次`, r.clears && `贏光她的籌碼 ${r.clears} 次`].filter(Boolean);
+    // 2026-11-09 第三版排版：內容不變，分區塊（稱號、四格數字、時間軸、失手）
+    const stat = (n, u) => el("div", {}, el("b", {}, n), el("span", {}, u));
+    const sec = (t) => el("p", { class: "sec" }, el("span", {}, t));
+    const o = el("div", { class: "overlay record" + (fail ? " fail" : "") }, el("div", { class: "sheet" },
+      el("p", { class: "head" }, `木子的骰寶桌・${fail ? "破產紀錄" : "破關紀錄"}`),
+      el("p", { class: "badge-title" }, title),
+      el("div", { class: "why" }, ...why.map((t) => el("span", {}, t))),
+      el("div", { class: "nums" }, stat(r.matches, "場"), stat(r.rounds, "把"), stat(min, "分鐘"), stat(`${WALLET0}→${wallet}`, "籌碼")),
+      sec("這一路"),
+      el("ol", { class: "path" }, ...steps.map(([when, what], n) => el("li", { class: n === steps.length - 1 ? "last" : "" }, el("small", {}, when), el("span", {}, what)))),
+      sec("失手"),
+      el("div", { class: "miss" },
+        el("p", { class: "big" }, kickedTotal ? `被趕出去 ${kickedTotal} 次` : "一次都沒被趕出去"),
+        ...kickParts.map(([n, t]) => el("p", { class: "row" }, el("span", {}, t), el("b", {}, `${n} 次`))),
+        other.length ? el("p", { class: "act" }, other.join("・")) : null),
+      el("div", { class: "foot" },
+        el("p", {}, `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}・${r.skipped ? "跳過說明" : "看完說明"}`),
+        el("p", {}, "截圖這一頁傳給開發者就好，謝謝試玩。")),
+      el("button", { class: "next", onclick: () => { o.remove(); resetAll(); } }, "從頭開始")));
+    document.body.append(o);
+  }
   function resetAll() {
-    document.querySelectorAll(".titlecard").forEach((n) => n.remove());
+    document.querySelectorAll(".titlecard, .overlay.record").forEach((n) => n.remove());
+    RUN = newRun(); saveRun();
     try { localStorage.removeItem(KEY + "layer"); localStorage.removeItem(KEY + "games"); localStorage.removeItem(KEY + "wallet"); } catch (e) {}
     gamesPlayed = 0; layer = 1; wallet = WALLET0;
     stopTells(); G.phase = "none"; startIntro(false);
@@ -1298,7 +1386,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     requestAnimationFrame(loop);
     ["end-reveal", "end-pay", "end-expose", "end-cloth"].forEach((n) => { const i = new Image(); i.src = IMG + n + ".webp"; });  // 結尾圖背景預載
     window.__G = () => G;
-    window.__B = { wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, zoom: () => zoomLevel(performance.now()), S: () => S };
+    window.__B = { record: (fail) => showRecord(fail), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, zoom: () => zoomLevel(performance.now()), S: () => S };
     window.__fn = { newRound, placeBet, openCup, grab, swap, swapStop, swapZones, fresh: () => { G = fresh(); }, setX: (x) => { G.swapT0 = performance.now() - x / swapZones().speed * 1000; } };
   }
   boot();
