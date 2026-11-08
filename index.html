@@ -1027,9 +1027,10 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       S.hold = "expr-angry";  // 原本用 expr-suspicious（瀏海亂、沒經過使用者確認），2026-11-09 換成確認過的生氣那張
       settle(sideOf(G.dice) === G.bet.side, a); G.result = (G.rclass === "win" ? "看穿了 +" : "看穿了 −") + a; G.stats.seen = (G.stats.seen || 0) + 1;
       layer = 3; saveLayer(); RUN.reach3 = RUN.reach3 || here();
-      G.lines.push({ c: "line", t: "你按住她扶著骰盅的右手。她手一縮，順勢把盅掀開。" });
+      // 2026-11-09 使用者定：明講她在被按住的最後一刻收手，骰子沒翻成、沒抓到證據，所以這場還沒贏
+      G.lines.push({ c: "line", t: "你按住她扶著骰盅的右手，她指尖卻先一步縮了回去，順勢把盅掀開。骰子沒被動過。" });
       G.lines.push({ c: "line", t: "「……手放開。」" });
-      G.revealCard = ["（左手吸引注意這招被我看穿了，她一定會改掉。）", "（她會換個辦法下手，還會故意亂動騙我出手。抓錯一次，我就得滾了。）"];
+      G.revealCard = ["（差一點。我按住的前一刻，她收手了。骰子沒翻成，什麼證據都沒抓到。）", "（左手吸引注意這招被我看穿了，她一定會改掉。）", "（她會換個辦法下手，還會故意亂動騙我出手。抓錯一次，我就得滾了。）"];
     } else if (kind === "half") {
       // 慢了一步：她已經翻完收手。第一層的話，鏡頭在這時候拉開，第一次看到右手
       S.hold = "hand-grab"; sfx("grab", 0.5);
