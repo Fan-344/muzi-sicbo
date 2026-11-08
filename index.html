@@ -144,7 +144,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .label.legend { text-align: center; display: block; border-radius: 6px; padding: 2px 0; }
 .talk .tabs { position: absolute; right: 0; bottom: 100%; display: flex; gap: 6px; align-items: flex-end; }
 .talk .tabs .nexttab { position: static; }
-.skiptab { padding: 2px 10px 1px; background: rgba(0,0,0,.45); color: var(--muted); border: 1px solid var(--brass-dim); border-bottom: 0; border-radius: 6px 6px 0 0; font: 700 .72rem/1.5 var(--body); letter-spacing: .05em; }
+/* 2026-11-09 跳過說明從「下一步」旁邊移到最下面一排正中間（有聲、清零重來中間），跟下一步分開免得誤按 */
+.skiptab { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom, 0px)); z-index: 20; font-size: .72rem; color: var(--brass); background: rgba(0,0,0,.55); border: 1px solid var(--brass-dim); border-radius: 999px; padding: 4px 14px; letter-spacing: .05em; }
 .nexttab { position: absolute; right: 0; bottom: 100%; padding: 2px 10px 1px; background: var(--clue); color: var(--felt-lo); border: 0; border-radius: 6px 6px 0 0; font: 700 .72rem/1.5 var(--body); letter-spacing: .05em; }
 @media (prefers-reduced-motion: reduce) { .hl { animation: none; box-shadow: 0 0 0 2px var(--clue); } }
 .swapbox { position: absolute; inset: 0; z-index: 5; background: var(--felt-lo); border: 2px solid var(--clue); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
@@ -1112,7 +1113,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     const lines = el("div", { class: "lines" });
     G.lines.slice(-3).forEach((l) => lines.append(el("p", { class: l.c }, l.t)));
     if (G.note && (G.phase === "result" || G.phase === "endwait")) lines.append(el("p", { class: "act" }, G.note));
-    // 說明時：右上角「跳過說明」＋「N / 16 下一步」（2026-11-09 使用者加跳過，按了直接坐下開始玩）
+    // 說明時：右上角「N / 16 下一步」；「跳過說明」放最下面一排正中間（2026-11-09 使用者加跳過，按了直接坐下開始玩）
     const tab = G.phase === "intro" && fullIntro() && G.introIdx < INTRO.length - 1
       ? el("div", { class: "tabs" },
           el("button", { class: "skiptab", onclick: (e) => { e.stopPropagation(); RUN.skipped = true; saveRun(); stopTells(); G.demo = null; newRound(); } }, "跳過說明"),
