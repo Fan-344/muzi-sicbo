@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>木子的骰寶桌</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 版面照 mock/layout.html v6：對話框、正方形場景、「她的籌碼｜骰子｜你的籌碼」一列、操作區。 */
+:root {
+  --felt: #0e3527; --felt-lo: #0a281d; --brass: #c8a14a; --brass-dim: #8a7034; --ink: #f2ecdc; --muted: #a7b9a9;
+  --red: #d64a3b; --win: #7fd18b; --clue: #8fc3d6; --ivory: #f6f1e4; --shadow: rgba(0,0,0,.45);
+  --display: "Noto Serif TC", "Songti TC", "PMingLiU", serif; --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; background: var(--felt-lo); color: var(--ink); font: 15px/1.5 var(--body); }
+/* 滿版：整頁撐滿高度，對話框吸收剩餘空間；寬螢幕才置中限寬 */
+.wrap { min-height: 100dvh; padding-block: calc(10px + env(safe-area-inset-top, 0px)) calc(40px + env(safe-area-inset-bottom, 0px)); padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 10px; }
+.lower { position: relative; flex: 1; display: flex; flex-direction: column; gap: 10px; }  /* 骰子列、對話框、操作區；換骰框蓋住整塊 */
+.lower > .talk { flex: 1; height: auto; min-height: 84px; margin-top: 12px; }  /* 上方留書籤的位置 */  /* 對話框吃掉剩下的高度；操作區固定高，所以各階段都不變 */
+@media (min-width: 521px) { .wrap { max-width: 480px; margin: 0 auto; } }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.talk { position: relative; border-left: 3px solid var(--brass); background: rgba(0,0,0,.25); border-radius: 0 8px 8px 0; padding: 8px 12px; height: 100px; flex: none; display: flex; flex-direction: column; }  /* 固定高度，各階段不變 */
+/* 名字做成書籤：貼在框的左上緣、往上凸出，不佔框內空間，字再多也蓋不到 */
+.talk .who { position: absolute; left: -3px; bottom: 100%; padding: 1px 10px 0; background: var(--brass); color: var(--felt-lo); font-size: .72rem; font-weight: 700; letter-spacing: .15em; line-height: 1.5; border-radius: 6px 6px 0 0; }
+/* 字太多時從上面切掉最舊的那行 */
+.talk .lines { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; }
+.talk p { margin: 0; }
+.talk .tell { color: var(--clue); font-size: .92rem; }
+.talk .act { color: var(--muted); font-size: .92rem; }
+.talk .mind { color: #e8c98a; font-size: .95rem; }  /* 主角的心聲 */
+
+.scene { position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #000; }
+.scene canvas { width: 100%; height: 100%; display: block; }
+.tag { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.5); color: var(--muted); font-size: .7rem; padding: 2px 8px; border-radius: 999px; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); background: var(--felt-lo); }
+
+.row { display: grid; grid-template-columns: 64px 1fr 64px; gap: 8px; align-items: stretch; }  /* 她的籌碼｜場景｜你的籌碼 */
+.purse { border: 1.5px solid var(--brass-dim); border-radius: 10px; background: rgba(0,0,0,.25); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding: 6px 4px; overflow: hidden; }
+.purse .who { font-size: .7rem; color: var(--brass); letter-spacing: .1em; margin-bottom: auto; }
+.purse canvas { width: 40px; height: auto; display: block; }
+.purse .n { font: 700 .9rem var(--body); font-variant-numeric: tabular-nums; }
+.dice { display: flex; gap: 10px; justify-content: center; align-items: center; padding-bottom: 14px; }  /* 底部留「偷看的」「被出千」標籤的位置 */
+.die { width: 54px; height: 54px; border-radius: 11px; background: var(--felt-lo); box-shadow: inset 0 0 0 2px var(--brass-dim); position: relative; }
+.die img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.die.shown { background: none; box-shadow: none; }
+.die.heard { background: none; box-shadow: 0 0 0 2px var(--clue); }
+.die.heard img { filter: sepia(1) hue-rotate(150deg) saturate(1.6) brightness(1.05); }
+.die.heard::after { content: "偷看的"; position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-size: .7rem; color: var(--clue); white-space: nowrap; }
+.die.cheatmark::after { content: "被出千"; position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-size: .7rem; font-weight: 700; color: var(--red); white-space: nowrap; }
+.die.shake { animation: shake .14s infinite alternate; }
+.die.flipanim img { animation: flip .28s ease-out; }
+.die.flipped::after { content: "你撥的"; position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-size: .7rem; color: var(--clue); white-space: nowrap; }
+@keyframes flip { 0% { transform: scaleX(1); } 45% { transform: scaleX(.1) translateY(-4px); } 100% { transform: scaleX(1); } }
+@keyframes shake { from { transform: translate(-2px, 1px) rotate(-6deg); } to { transform: translate(2px, -1px) rotate(6deg); } }
+
+.panel { border: 2px solid var(--brass); border-radius: 14px; padding: 8px 10px; background: rgba(0,0,0,.15); display: flex; flex-direction: column; justify-content: center; gap: 6px; height: 144px; flex: none; }  /* 固定高度，各階段不變；下注那頁剛好塞滿 */
+.label { font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
+.amt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.amt button { border: 1.5px solid var(--brass-dim); background: transparent; border-radius: 10px; padding: 6px; font-variant-numeric: tabular-nums; }
+.amt button.on { background: var(--brass); color: var(--felt-lo); border-color: var(--brass); font-weight: 700; }
+.amt button:disabled { opacity: .3; cursor: default; }
+.bs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bs button { border: 2px solid var(--brass); background: rgba(0,0,0,.2); border-radius: 12px; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; }
+.bs b { font: 900 2.1rem/1.1 var(--display); }
+.bs small { color: var(--muted); font-size: .72rem; }
+.bs button:disabled { opacity: .3; cursor: default; }
+.moves { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.mv { border: 1.5px solid var(--brass-dim); background: rgba(0,0,0,.25); border-radius: 10px; padding: 20px 6px; display: flex; flex-direction: column; align-items: center; }
+.mv b { font: 900 1.05rem/1.25 var(--display); letter-spacing: .02em; white-space: nowrap; }
+.mv.open { background: var(--brass); color: var(--felt-lo); border-color: var(--brass); } .mv.open small { color: var(--felt-lo); opacity: .75; }
+.mv.grab { border-color: var(--red); } .mv.swap { border-color: var(--clue); }
+.mv:disabled { opacity: .35; cursor: default; }
+/* 每把結束的彈出視窗 */
+.pop { position: fixed; left: 50%; top: 50%; z-index: 30; transform: translate(-50%, -50%); min-width: 200px; text-align: center; background: rgba(6, 22, 16, .94); border: 2px solid var(--brass); border-radius: 16px; padding: 16px 28px; box-shadow: 0 10px 40px rgba(0,0,0,.6); pointer-events: none; display: flex; flex-direction: column; gap: 4px; animation: popio 2s ease-out forwards; }
+.pop b { font: 900 2.2rem/1.15 var(--display); color: var(--ink); letter-spacing: .08em; white-space: nowrap; }
+.pop span { font: 900 1.5rem/1.2 var(--display); white-space: nowrap; }
+.pop.win { border-color: var(--win); } .pop.win span { color: var(--win); }
+.pop.lose { border-color: var(--red); } .pop.lose span { color: var(--red); }
+@keyframes popio { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); } 20% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .pop { animation: popfade 2s linear forwards; } @keyframes popfade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } } }
+/* 抉擇階段的外框閃爍 */
+.scene.watch { animation: watchblink 1.2s ease-in-out infinite; }
+@keyframes watchblink { 0%, 100% { box-shadow: 0 0 0 3px var(--clue), 0 0 16px rgba(143,195,214,.55); } 50% { box-shadow: 0 0 0 3px rgba(143,195,214,0), 0 0 0 rgba(143,195,214,0); } }
+@media (prefers-reduced-motion: reduce) { .scene.watch { animation: none; box-shadow: 0 0 0 3px var(--clue); } }
+/* 說明投影片 */
+.hl { box-shadow: 0 0 0 2px var(--clue), 0 0 12px rgba(143,195,214,.45); animation: hlpulse 1.1s ease-in-out infinite alternate; }  /* 底色先亮著，動畫停時也看得到 */
+@keyframes hlpulse { from { box-shadow: 0 0 0 2px rgba(143,195,214,.45), 0 0 4px rgba(143,195,214,.2); } to { box-shadow: 0 0 0 2px var(--clue), 0 0 18px rgba(143,195,214,.6); } }
+.panel.demo button { pointer-events: none; }
+.slide { text-align: center; display: flex; flex-direction: column; gap: 6px; }
+.slide b { font: 900 1.45rem/1.2 var(--display); color: var(--brass); letter-spacing: .15em; }
+.slide small { font-size: .95rem; color: var(--ink); line-height: 1.45; }
+.dice .badge { font: 700 .92rem var(--body); color: var(--ink); background: rgba(0,0,0,.35); border: 1px solid var(--brass-dim); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.label.legend { text-align: center; display: block; border-radius: 6px; padding: 2px 0; }
+.nexttab { position: absolute; right: 0; bottom: 100%; padding: 2px 10px 1px; background: var(--clue); color: var(--felt-lo); border: 0; border-radius: 6px 6px 0 0; font: 700 .72rem/1.5 var(--body); letter-spacing: .05em; }
+@media (prefers-reduced-motion: reduce) { .hl { animation: none; box-shadow: 0 0 0 2px var(--clue); } }
+.swapbox { position: absolute; inset: 0; z-index: 5; background: var(--felt-lo); border: 2px solid var(--clue); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+.swapbox .title { font: 900 1.2rem var(--display); color: var(--clue); letter-spacing: .2em; text-align: center; margin: 0; }
+.swapbox .watch { text-align: center; font-size: 1rem; }
+.bar { position: relative; height: 44px; border-radius: 8px; overflow: hidden; background: #000; }
+.z { position: absolute; top: 0; bottom: 0; } .z.ok { background: var(--win); } .z.fail { background: #c9a227; } .z.caught { background: var(--red); }
+.marker { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: var(--ivory); box-shadow: 0 0 6px #fff; }
+.marker.frozen { background: #fff; width: 6px; margin-left: -3px; box-shadow: 0 0 10px #fff; }
+.watch { margin: 0; color: var(--muted); font-size: .9rem; }
+.zone { margin: 0; text-align: center; font: 900 1.4rem var(--display); padding: 6px; }
+.zone.ok { color: var(--win); } .zone.fail { color: #c9a227; } .zone.caught { color: var(--red); }
+.card { border: 2px solid var(--brass); border-radius: 12px; padding: 8px 14px; background: rgba(0,0,0,.3); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.card .sum { font: 900 1.5rem/1.1 var(--display); } .card .bs2 { color: var(--muted); font-size: .95rem; flex: 1; text-align: center; } .card .net { font: 900 1.4rem/1.1 var(--display); }
+.card.win { border-color: var(--win); } .card.win .net { color: var(--win); }
+.card.lose { border-color: var(--red); } .card.lose .net { color: var(--red); }
+.next { background: var(--brass); color: var(--felt-lo); border: 0; border-radius: 10px; padding: 11px; font-weight: 700; font-size: 1rem; }
+.next.stop { font-size: 1.3rem; letter-spacing: .3em; padding: 14px; }
+.next.play { font-size: 1.1rem; padding: 9px; }
+.hint { background: transparent; border: 1.5px dashed var(--clue); color: var(--clue); border-radius: 10px; padding: 8px; }
+.reset { position: fixed; right: max(10px, env(safe-area-inset-right, 0px)); bottom: max(10px, env(safe-area-inset-bottom, 0px)); z-index: 20; font-size: .72rem; color: var(--muted); background: rgba(0,0,0,.55); border: 1px solid var(--brass-dim); border-radius: 999px; padding: 4px 10px; }
+.reset.mute { right: auto; left: max(10px, env(safe-area-inset-left, 0px)); }
+.wait { text-align: center; color: var(--muted); padding: 10px; }
+
+.sheet { border: 2px solid var(--brass); border-radius: 14px; background: var(--felt-lo); padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 10px 30px var(--shadow); }
+.overlay { position: fixed; inset: 0; z-index: 10; background: rgba(6, 22, 16, .97); overflow-y: auto; padding-block: max(16px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px)); padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+.overlay .sheet { max-width: 480px; margin: 0 auto; }
+.logbox summary { cursor: pointer; color: var(--clue); font-size: .9rem; }
+.logbox[open] summary { margin-bottom: 8px; }
+.sheet h2 { margin: 0; font: 900 1.4rem var(--display); text-wrap: balance; }
+.sheet p { margin: 0; } .sheet p.act { color: var(--muted); }
+.stats { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 4px 10px; font-size: .88rem; }
+.stats span { color: var(--muted); } .stats b { font-variant-numeric: tabular-nums; text-align: right; }
+.logwrap { overflow-x: auto; }
+.log { border-collapse: collapse; font-size: .78rem; width: 100%; min-width: 360px; }
+.log th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--brass-dim); position: sticky; top: 0; background: var(--felt-lo); }
+.log td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.06); vertical-align: top; }
+.log tr.cheat td:last-child { color: var(--red); font-weight: 700; }
+.log td.w { color: var(--win); } .log td.l { color: var(--red); }
+.thumbs { display: flex; gap: 4px; flex-wrap: wrap; }
+.thumbs canvas { width: 44px; height: 44px; border-radius: 6px; border: 1px solid var(--brass-dim); }
+@media (prefers-reduced-motion: reduce) { .die.shake, .die.flipanim img { animation: none; } }
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+(() => {
+  // ---------- 規則數值（照 duel-sicbo 2026-11-07 版） ----------
+  const START = 8, HIM = 20;       // duel-sicbo 原值 8 / 14；她的籌碼加到 20 壓玩家勝率（2026-11-08）
+  const NOISE = 0.12, HOLD = 700;  // 習慣動作出現率、訊號停留。duel-sicbo 原值 0.06
+  const NOTICE = 1;                // 開盅後察覺「她動了手」的機率：2026-11-08 晚改成一定發現。duel-sicbo 原值 0.9
+  // 五個訊號：代號對應圖 tell-<id>-a/b。真破綻每局隨機一個，被抓到就換。
+  const TELLS = ["cup", "drink", "hair", "chat", "lean"];
+  const TELL_NAME = { cup: "手搭盅", drink: "喝啤酒", hair: "撥頭髮", chat: "聊天", lean: "往後靠" };
+  // 紀錄表縮圖：從 b 格裁的區域（656 座標）
+  const TELL_CROP = { cup: [80, 400, 300, 256], drink: [300, 60, 320, 320], hair: [330, 40, 300, 300], chat: [330, 40, 300, 320], lean: [150, 120, 360, 360] };
+  const IMG = "img/";
+  const FRAMES = ["base", "expr-blink", "expr-tease", "expr-smug", "expr-suspicious", "expr-caught", "expr-nostalgia", "expr-angry",
+    "tell-cup-a", "tell-cup-b", "tell-drink-a", "tell-drink-b", "tell-hair-a", "tell-hair-b", "tell-chat-a", "tell-chat-b", "tell-lean-a", "tell-lean-b",
+    "shake-a", "shake-b", "cup-open", "hand-grab", "hand-grab-caught", "hand-swap", "hand-swap-caught"];
+  const PROPS = ["die-1", "die-2", "die-3", "die-4", "die-5", "die-6", "chip-top-black", "chip-side-black", "chip-bottom-black", "chip-top-red", "chip-side-red", "chip-bottom-red"];
+  const W = 656, H = 656, LAMP = [121, 37, 534, 51];
+
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const rnd = () => 1 + Math.floor(Math.random() * 6);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const reduced = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fast = () => !!window.__fast;
+  const wait = (ms) => fast() ? Promise.resolve() : new Promise((r) => setTimeout(r, reduced() ? Math.min(ms, 150) : ms));
+  const sum = (d) => d[0] + d[1] + d[2];
+  const isTriple = (d) => d[0] === d[1] && d[1] === d[2];
+  const sideOf = (d) => isTriple(d) ? "triple" : sum(d) >= 11 ? "big" : "small";
+  const sideName = { big: "大", small: "小" };
+
+  // 真破綻跨局保留
+  let realTell = null;
+  try { const v = localStorage.getItem("muzi_tell"); if (v !== null && TELLS.includes(v)) realTell = v; } catch (e) {}
+  if (realTell === null) realTell = pick(TELLS);
+  let gamesPlayed = 0;
+  try { gamesPlayed = +localStorage.getItem("muzi_games") || 0; } catch (e) {}
+  function saveTell() { try { localStorage.setItem("muzi_tell", realTell); localStorage.setItem("muzi_games", String(gamesPlayed)); } catch (e) {} }
+
+  let G;
+  function fresh() {
+    return {
+      phase: "intro", you: START, him: HIM, amt: 1, real: realTell,
+      susp: 0, caution: 0, angry: 0, round: 0,
+      dice: [1, 1, 1], orig: null, heard: null, bet: null, cheated: false, changed: -1, lines: [], result: null, rclass: "", note: "",
+      log: [], shownTells: [], act: "", switched: false, swapUses: 0, swapT0: 0, swapX: 0, swapZone: "", noticed: false,
+      stats: { cheats: 0, caught: 0, wrong: 0, swapOk: 0, swapBad: 0, listened: 0, seenChange: 0 },
+      diceState: "hidden", // hidden | heard | shown
+      tellSeq: 0, introIdx: 0, loseStreak: 0, hintShown: false,
+    };
+  }
+
+  // ---------- 音效 ----------
+  // 檔案來自 Kenney Casino Audio（CC0，assets/sfx/LICENSE-kenney.txt）；燈管、按手、拍桌用程式合成
+  const SFX_FILES = { shake: ["shake-1", "shake-2", "shake-3"], cupDown: ["cup-down-1", "cup-down-2"], bet: ["bet-1", "bet-2", "bet-3"], cupLift: ["cup-lift"], diceShow: ["dice-show"], grab: ["grab"], swapCaught: ["swap-caught"], win: ["win"], lose: ["lose"],
+    // 她的語氣聲（Cici Fyre CC0，Type 2）：吸氣、哼、欸、嘖
+    // 主要用 Mature Female 的雜聲，T2 的當補充
+    vIn: ["voice-m-gasp1", "voice-m-gasp1", "voice-jump1", "voice-jump2"], vSmug: ["voice-m-small_single_laugh", "voice-m-laugh", "voice-m-small_single_laugh"],
+    vCaught: ["voice-m-anime_eh", "voice-m-anime_wah", "voice-m-anime_uh"], vAngry: ["voice-m-annoyed_grumble", "voice-m-annoyed_grumble", "voice-attack1", "voice-attack2"],
+    vSigh: ["voice-m-sigh1", "voice-m-sigh2"], vHmm: ["voice-m-anime_haa", "voice-m-anime_ah"] };
+  const SFX = { ctx: null, buf: {}, muted: false };
+  try { SFX.muted = localStorage.getItem("muzi_mute") === "1"; } catch (e) {}
+  function audioCtx() {
+    if (!SFX.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; SFX.ctx = new AC(); }
+    if (SFX.ctx.state === "suspended") SFX.ctx.resume();
+    return SFX.ctx;
+  }
+  async function loadSfx() {
+    const ctx = audioCtx(); if (!ctx) return;
+    const names = [].concat(...Object.values(SFX_FILES));
+    await Promise.all(names.map(async (n) => { try { const r = await fetch("sfx/" + n + (n.startsWith("voice-") ? ".wav" : ".ogg")); SFX.buf[n] = await ctx.decodeAudioData(await r.arrayBuffer()); } catch (e) {} }));
+  }
+  function sfx(kind, gain) {
+    if (SFX.muted || fast()) return; const ctx = audioCtx(); if (!ctx) return;
+    const list = SFX_FILES[kind]; if (!list) return; const b = SFX.buf[pick(list)]; if (!b) return;
+    const src = ctx.createBufferSource(); src.buffer = b; const g = ctx.createGain(); g.gain.value = gain == null ? 0.8 : gain;
+    src.connect(g); g.connect(ctx.destination); src.start();
+  }
+  // 合成：雜訊脈衝經濾波。thud 低沉（按手腕）、slap 短脆（拍桌、被扣住）、buzz 燈管（弱）
+  function synth(kind, level) {
+    if (SFX.muted || fast()) return; const ctx = audioCtx(); if (!ctx) return;
+    const dur = kind === "buzz" ? 0.09 : kind === "thud" ? 0.12 : 0.06;
+    const n = Math.floor(ctx.sampleRate * dur); const buf = ctx.createBuffer(1, n, ctx.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, kind === "buzz" ? 0.6 : 2.2);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = kind === "buzz" ? "bandpass" : "lowpass"; f.frequency.value = kind === "buzz" ? 120 : kind === "thud" ? 220 : 900; f.Q.value = kind === "buzz" ? 8 : 0.8;
+    const g = ctx.createGain(); g.gain.value = level != null ? level : (kind === "buzz" ? 0.12 : 0.7);
+    src.connect(f); f.connect(g); g.connect(ctx.destination); src.start();
+  }
+  let lastBuzz = 0;
+  // 日光燈：試聽頁第 3 種「只在閃時嗡嗡（斷續）」。平常安靜，燈閃那段才嗡，嗡聲每 12–30 ms 亂跳一次像接觸不良。
+  // 用 120 Hz 鋸齒波：手機喇叭放不出 120 Hz 本身，但放得出泛音，聽起來就是嗡。
+  function lampSound(seq, now) {
+    if (SFX.muted || fast()) return; const ctx = audioCtx(); if (!ctx) return;
+    const b = ctx.currentTime + 0.02, peak = 0.08;
+    const out = ctx.createGain(); out.gain.value = 0;
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 150;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1500;
+    hp.connect(lp); lp.connect(out); out.connect(ctx.destination);
+    const oscs = [[120, 1], [240, 0.35]].map(([f, lv]) => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; const g = ctx.createGain(); g.gain.value = lv; o.connect(g); g.connect(hp); o.start(b); return o; });
+    const g = out.gain;
+    for (const [a, e, k] of seq) {
+      const t0 = b + Math.max(0, a - now) / 1000, t1 = b + Math.max(0, e - now) / 1000, top = peak * (0.5 + k);
+      let t = t0; while (t < t1) { g.setValueAtTime(Math.random() < 0.7 ? top * (0.5 + Math.random() * 0.5) : 0, t); t += 0.012 + Math.random() * 0.018; }
+      g.setTargetAtTime(0, t1, 0.04);
+    }
+    const stopAt = b + Math.max(0, seq[seq.length - 1][1] - now) / 1000 + 0.4;
+    oscs.forEach((o) => o.stop(stopAt));
+  }
+
+  // ---------- 圖與場景 ----------
+  const img = {};
+  function load(name) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = IMG + name + ".webp"; img[name] = i; }); }
+
+  // 場景狀態：timeline 播放中的格、否則 hold（開盅後盅一直抬著）或底圖＋眨眼
+  const S = { tl: null, hold: null, stake: 0, nextBlink: 0, blinkUntil: 0, flick: [], nextFlick: 0, t0: performance.now() };
+  function play(steps) { // steps: [[frame, ms], ...]
+    if (fast()) { const last = steps[steps.length - 1]; return Promise.resolve(); }
+    return new Promise((res) => {
+      const tl = { steps: steps.map(([f, d, fn]) => [f, reduced() ? Math.min(d, 150) : d, fn]), t0: performance.now(), res, fired: new Set() };
+      S.tl = tl;
+      // 保底：分頁在背景時 rAF 停擺，時間到了還是要結束，不然流程卡死
+      const total = tl.steps.reduce((a, [, d]) => a + d, 0);
+      setTimeout(() => { if (S.tl === tl) { S.tl = null; res(); } }, total + 80);
+      // 步驟回呼（台詞）也用計時器觸發，不靠畫格：背景分頁 rAF 不跑
+      let off = 0;
+      tl.steps.forEach(([, d, fn], i) => { if (fn) { const at = off; setTimeout(() => { if (S.tl === tl && !tl.fired.has(i)) { tl.fired.add(i); fn(); } }, at); } off += d; });
+    });
+  }
+  function frameAt(now) {
+    if (S.tl) {
+      let t = now - S.tl.t0;
+      for (let i = 0; i < S.tl.steps.length; i++) {
+        const [f, d, fn] = S.tl.steps[i];
+        if (t < d) { if (fn && !S.tl.fired.has(i)) { S.tl.fired.add(i); fn(); } return f; }
+        t -= d;
+      }
+      // 播完：這一格先停在最後一張。接下來要定格的圖（例如開盅後的 cup-open）是在 await 之後才設，
+      // 那要等這一格畫完；不停在最後一張的話會閃回底圖一格，看起來像盅蓋回去又開一次
+      const last = S.tl.steps[S.tl.steps.length - 1][0];
+      const r = S.tl.res; S.tl = null; r();
+      return last;
+    }
+    if (S.hold) return S.hold;
+    if (now >= S.nextBlink) { S.blinkUntil = now + 200; S.nextBlink = now + 4000 + Math.random() * 2000; }
+    return now < S.blinkUntil ? "expr-blink" : "base";
+  }
+  // 日光燈閃：四種型態、間隔 6–15 秒（照 render_gif.py）
+  function makeFlick(kind, now) {
+    let t = now; const seq = [];
+    const push = (d, k) => { seq.push([t, t + d, k]); t += d; };
+    if (kind === "micro") push(60 + Math.random() * 30, 0.15 + Math.random() * 0.15);
+    else if (kind === "double") for (let i = 0; i < 2; i++) { push(80 + Math.random() * 60, 0.3 + Math.random() * 0.2); t += 80 + Math.random() * 100; }
+    else if (kind === "sag") push(250 + Math.random() * 200, 0.2 + Math.random() * 0.2);
+    else for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) { push(50 + Math.random() * 50, 0.4 + Math.random() * 0.3); t += 40 + Math.random() * 80; }
+    return { seq, end: t };
+  }
+  // 她沒出千的那把：押完到第一個動作之間，燈一定閃一次（時間點、閃法都隨機）
+  const FLICK_MAX = { double: 480, sag: 450, burst: 1100 };  // 沒出千時的閃法與最長多久（ms）。輕閃太短看不出來，不用
+  function honestFlick(kind) { const now = performance.now(); const { seq } = makeFlick(kind, now); S.flick = seq; lampSound(seq, now); }
+  function flickerLevel(now) {
+    if (S.noAmbient && now >= S.nextFlick) S.nextFlick = now + 1500;  // 押完到第一個動作之前：不放平常的隨機燈閃，免得誤導
+    if (now >= S.nextFlick) {
+      const kind = pick(["micro", "micro", "micro", "micro", "double", "double", "sag", "sag", "burst"]);
+      let t = now; const seq = [];
+      const push = (d, k) => { seq.push([t, t + d, k]); t += d; };
+      if (kind === "micro") push(60 + Math.random() * 30, 0.15 + Math.random() * 0.15);
+      else if (kind === "double") for (let i = 0; i < 2; i++) { push(80 + Math.random() * 60, 0.3 + Math.random() * 0.2); t += 80 + Math.random() * 100; }
+      else if (kind === "sag") push(250 + Math.random() * 200, 0.2 + Math.random() * 0.2);
+      else for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) { push(50 + Math.random() * 50, 0.4 + Math.random() * 0.3); t += 40 + Math.random() * 80; }
+      S.flick = seq; S.nextFlick = t + 6000 + Math.random() * 9000;
+      lampSound(seq, now);
+    }
+    let lv = 0; for (const [a, b, k] of S.flick) if (now >= a && now < b) lv = Math.max(lv, k);
+    return lv;
+  }
+  let sceneCv, sceneCtx;
+  function drawScene(now) {
+    const ctx = sceneCtx; if (!ctx) return;
+    const f = img[frameAt(now)] || img.base;
+    ctx.drawImage(f, 0, 0, W, H);
+    const lv = reduced() ? 0 : flickerLevel(now);
+    if (lv > 0) {
+      const cx = (LAMP[0] + LAMP[2]) / 2, cy = (LAMP[1] + LAMP[3]) / 2;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 1.15);
+      g.addColorStop(0, `rgba(0,0,0,${(lv * 0.5).toFixed(3)})`); g.addColorStop(1, `rgba(0,0,0,${(lv * 0.5 * 0.35).toFixed(3)})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = `rgba(30,45,38,${(lv * 0.7).toFixed(3)})`; ctx.fillRect(LAMP[0], LAMP[1], LAMP[2] - LAMP[0], LAMP[3] - LAMP[1]);
+    }
+    if (S.stake > 0) {  // 桌上押的那疊：先畫一塊貼桌的影子，不然會飄
+      const sx = W / 2 + 6, sy = H - 26;
+      ctx.save(); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.ellipse(sx + 2, sy - 3, 34, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      drawStack(ctx, "red", S.stake, sx, sy, 0.95);
+    }
+  }
+  // 籌碼堆：底片＋側片×(n−2)＋頂面，圖片原寬 59
+  function drawStack(ctx, color, n, cx, bottomY, scale) {
+    const top = img["chip-top-" + color], side = img["chip-side-" + color], bot = img["chip-bottom-" + color];
+    if (!top || n <= 0) return;
+    const w = top.width * scale; let y = bottomY; const x = cx - w / 2;
+    if (n >= 2) { y -= bot.height * scale; ctx.drawImage(bot, x, y, w, bot.height * scale); }
+    for (let i = 0; i < Math.max(0, n - 2); i++) { y -= side.height * scale; ctx.drawImage(side, x, y, w, side.height * scale); }
+    y -= top.height * scale; ctx.drawImage(top, x, y, w, top.height * scale);
+  }
+  function stackHeight(color, n, scale) {
+    const top = img["chip-top-" + color], side = img["chip-side-" + color], bot = img["chip-bottom-" + color];
+    return scale * (top.height + (n >= 2 ? bot.height : 0) + Math.max(0, n - 2) * side.height);
+  }
+  function loop(now) { drawScene(now); requestAnimationFrame(loop); }
+
+  function el(tag, attrs, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === "class") n.className = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else if (v === true) n.setAttribute(k, "");
+      else if (v !== false && v != null) n.setAttribute(k, v);
+    }
+    for (const c of kids.flat()) if (c != null && c !== false) n.append(c.nodeType ? c : document.createTextNode(c));
+    return n;
+  }
+
+  // 開場：她口述規則，一句一句點過去；畫面上同時輪著做五個動作，不標示。
+  // 開場說明（2026-11-08 第三版：像投影片，每句配一個畫面狀態 scene）。c: "act" 是旁白（灰字）
+  const INTRO = [
+    { scene: "table", c: "act", t: "麻將館最裡面那張綠色賭桌，以前是她爸爸在顧。現在坐在莊家位子上的是木子，跟你從小在麻將館後面一起長大的那個女生。" },
+    { scene: "table", t: "「喲，稀客。坐啊。」" },
+    { scene: "dice", t: "「我們玩骰寶。我把三顆骰子放進骰盅裡搖，你猜三顆加起來的點數是大還是小。」" },
+    { scene: "triple", t: "「加起來 4 到 10 點算小，11 到 17 點算大。要是三顆點數一樣，叫做豹子，不管你押大還是押小，都算我贏。」" },
+    { scene: "bet", t: "「每一把你可以押一到三個籌碼。押中了，你押幾個我就賠你幾個；押錯了，你押的籌碼就歸我。」" },
+    { scene: "purse", t: "「你手上有 " + START + " 個籌碼，我有 " + HIM + " 個。把我的 " + HIM + " 個全部贏走，你就贏了；你的 " + START + " 個輸光，這局就是你輸。」" },
+    { scene: "peek", c: "act", t: "木子放下骰盅的那一下，盅底會掀起一條縫。你眼睛快，每把都能偷看到一到兩顆骰子的點數，會用藍色顯示在骰子格裡。" },
+    { scene: "peek2", c: "act", t: "看到的是 4、5、6 這種大點數，押大比較有機會；看到 1、2、3，押小比較有機會。偷看到兩顆的話更好猜。" },
+    { scene: "cheat", c: "act", t: "木子的爸爸教過她一招：在你快要贏的那一把，偷偷把一顆骰子翻面，讓你變成輸。" },
+    { scene: "cheatReveal", c: "act", t: "但你從小在麻將館長大，別人出千瞞不過你的眼睛。開盅時，被她翻過的那顆你一定認得出來，會標上「被出千」。" },
+    { scene: "mismatch", c: "act", t: "你偷看到的那顆，開出來要是變了，也是她動的手。只是等到開盅才發現，那一把已經輸了。" },
+    { scene: "tell", c: "act", t: "出千的人，常常會有一個改不掉的小動作。看出是哪個動作，就能在開盅之前抓她。" },
+    { scene: "watch", c: "act", t: "押完之後、開盅之前，畫面的外框會一閃一閃。這段時間她可能露出破綻，要盯著她的動作。" },
+    { scene: "grab", c: "act", t: "覺得她這把動了手，就在開盅前按『抓對手出千』，當場按住她的手檢查。" },
+    { scene: "grab", t: "「想抓我？抓對了，我賠你押的三倍；抓錯了，你賠我兩倍。」" },
+    { scene: "swap", c: "act", t: "你自己也會一點手法。按『自己出千』，掀盅的瞬間用小指撥一顆骰子：光點會左右跑，按『動手』讓它停下來。" },
+    { scene: "swapZones", c: "act", t: "停在綠色，就把骰子換成你押的那一邊；停在黃色，沒換到，照原本的點數開；停在紅色，被她抓到，賠她三倍。" },
+    { scene: "swapHard", t: "「想在我面前動手？你換越多次，我盯得越緊。」" },
+    { scene: "start", t: "「好了，來吧。」" },
+  ];
+  const introLine = (x) => typeof x === "string" ? { c: "line", t: x } : { c: x.c || "line", t: x.t };
+  // 第二次以後：她每 6–9 秒做一個動作、配一句催促或嗆人的話，直到你坐下
+  const INTRO_AGAIN = ["「又來了喔。坐。」"];
+  const NAG = [["lean", "「怕了？」"], ["drink", "「站著不用錢，坐下才要。」"], ["chat", "「坐啊，我不咬人。」"], ["hair", "「我沒時間等你想。」"], ["cup", "「要賭就快。」"], ["lean", "「你爸不會這樣磨蹭。」"]];
+  async function introNag(seq) {
+    const alive = () => G.phase === "intro" && G.tellSeq === seq;
+    const order = NAG.slice().sort(() => Math.random() - 0.5); let i = 0;
+    while (alive()) {
+      await wait(6000 + Math.random() * 3000);
+      if (!alive()) return;
+      const [t, line] = order[i++ % order.length];
+      const say = () => { G.lines = [{ c: "line", t: line }]; const box = document.querySelector(".talk"); if (box) box.replaceWith(renderTalk()); };
+      await play([["tell-" + t + "-a", 150], ["tell-" + t + "-b", HOLD, say], ["tell-" + t + "-a", 150]]);
+    }
+  }
+  // 抉擇時間拖太久（她沒出千的把）：配的是「等你開」的情境話，不是開場那套
+  const DECIDE = [
+    ["lean", "「開不開？」"],
+    ["cup", "「要抓就抓，我手放這裡。」"],
+    ["drink", "「慢慢想，啤酒我自己喝。」"],
+    ["hair", "「不會是在算吧？算不出來的啦。」"],
+    ["chat", "「我爸說，猶豫的人都輸。」"],
+    ["lean", "「不開我幫你開喔。」"],
+    ["cup", "「盅又不會跑。」"],
+  ];
+  const fullIntro = () => gamesPlayed === 0 || G.forceIntro;
+  // 說明時一句話配一個動作：按 ▶ 換句時做一次，之後待機到下一句。五個動作洗牌輪，不重複
+  let introOrder = [];
+  function introTell() {
+    if (!introOrder.length) introOrder = TELLS.slice().sort(() => Math.random() - 0.5);
+    const t = introOrder.pop();
+    play([["tell-" + t + "-a", 150], ["tell-" + t + "-b", HOLD, null], ["tell-" + t + "-a", 150]]);
+  }
+
+  // ---------- 說明的投影片：每句一個 scene，畫面跟著切 ----------
+  // G.demo：示範用的骰子、標記、操作區卡片、亮框。只在 intro 用，不碰真的牌局
+  const SLIDE = {
+    table: ["木子的骰寶桌", "麻將館最裡面那張綠桌"],
+    dice: ["大小怎麼算", "三顆加起來：4–10 小，11–17 大"],
+    triple: ["豹子", "三顆一樣，不管押大押小都算莊家贏"],
+    peek: ["偷看", "藍色的是你偷看到的點數"],
+    peek2: ["偷看", "看到 1 和 2，押小比較有機會"],
+    cheatReveal: ["你的眼睛", "被翻過的那顆，你一定認得出來"],
+    mismatch: ["對不上", "偷看到 5，開出來是 3：她動了手"],
+    cheat: ["她的手法", "在你快贏的那把，偷翻一顆"],
+    tell: ["破綻", "她出千時，會有一個改不掉的小動作"],
+    watch: ["框在閃，看仔細", "押完到開盅之前，她可能露出破綻"],
+  };
+  const TELL_SCENES = new Set(["table", "dice", "triple", "bet", "purse", "peek", "peek2", "mismatch", "start"]);  // 這些頁照舊一句配一個動作
+  const tutAlive = (tok) => G.phase === "intro" && G.tutTok === tok;
+  function tutLoop(tok, ms, fn) { const go = () => { if (!tutAlive(tok)) return; fn(); setTimeout(go, ms); }; setTimeout(go, ms); }
+  function enterStep(i) {
+    const step = INTRO[i]; const sc = step.scene;
+    const tok = G.tutTok = (G.tutTok || 0) + 1;
+    stopTells(); S.hold = null;
+    G.demo = { scene: sc, dice: null, heard: -1, marks: {}, badge: "", hl: {} };
+    const D = G.demo;
+    if (sc === "dice") {
+      const ex = [[[3, 5, 6], "14 點　大"], [[1, 2, 4], "7 點　小"]]; let k = 0;
+      D.dice = ex[0][0]; D.badge = ex[0][1];
+      tutLoop(tok, 1800, () => { k = 1 - k; D.dice = ex[k][0]; D.badge = ex[k][1]; render(); });
+    } else if (sc === "triple") { D.dice = [4, 4, 4]; D.badge = "豹子　莊家贏"; }
+    else if (sc === "bet") D.hl.panel = true;
+    else if (sc === "purse") D.hl.purse = true;
+    else if (sc === "peek") { D.dice = [null, 5, null]; D.heard = [1]; }
+    else if (sc === "peek2") { D.dice = [1, 2, null]; D.heard = [0, 1]; }
+    else if (sc === "mismatch") {
+      const show = () => { D.dice = [2, 5, 6]; D.marks = {}; D.flipAt = 0; render(); };
+      const flip = () => { D.dice = [2, 3, 6]; D.marks = { 1: "cheatmark" }; D.flipAt = performance.now(); render(); };
+      D.dice = [2, 5, 6]; setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300);
+      tutLoop(tok, 3600, () => { show(); setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300); });
+    }
+    else if (sc === "cheat" || sc === "cheatReveal") {
+      const show = () => { D.dice = [4, 5, 3]; D.marks = {}; D.badge = "12 點　大"; D.flipAt = 0; render(); };
+      const flip = () => { D.dice = [4, 5, 1]; D.marks = { 2: "cheatmark" }; D.badge = "10 點　小"; D.flipAt = performance.now(); render(); };
+      show(); setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300);
+      tutLoop(tok, 3600, () => { show(); setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300); });
+    } else if (sc === "tell" || sc === "watch") {
+      D.hl.scene = sc === "tell";  // watch 頁用外框閃爍，不用亮框 const order = TELLS.slice().sort(() => Math.random() - 0.5); let k = 0;
+      const one = () => { const t = order[k++ % order.length]; play([["tell-" + t + "-a", 150], ["tell-" + t + "-b", HOLD, null], ["tell-" + t + "-a", 150]]); };
+      setTimeout(() => { if (tutAlive(tok)) one(); }, 400); tutLoop(tok, 2000, one);
+    } else if (sc === "grab") {
+      D.hl.grab = true;
+      const once = async () => { S.hold = null; await play([["hand-grab", 500]]); if (!tutAlive(tok)) return; S.hold = "hand-grab-caught"; setTimeout(() => { if (tutAlive(tok)) S.hold = null; }, 1500); };
+      setTimeout(() => { if (tutAlive(tok)) once(); }, 500); tutLoop(tok, 3800, once);
+    } else if (sc === "swap" || sc === "swapZones" || sc === "swapHard") {
+      S.hold = "hand-swap"; D.hl.legend = sc === "swapZones";
+      D.zones = sc === "swapHard" ? { ok: 0.12, caught: 0.28, speed: 1.6 } : { ok: 0.22, caught: 0.2, speed: 0.9 };
+      const t0 = performance.now();
+      const tick = () => { if (!tutAlive(tok)) return; const m = document.getElementById("demomarker"); if (m) { const x = ((performance.now() - t0) / 1000 * D.zones.speed) % 2; m.style.left = `${(x <= 1 ? x : 2 - x) * 100}%`; } requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }
+    G.lines = [introLine(step)];
+    render();
+    if (TELL_SCENES.has(sc)) setTimeout(() => { if (tutAlive(tok)) introTell(); }, i === 0 ? 600 : 0);
+  }
+  function nextIntro() {
+    if (G.phase !== "intro" || !fullIntro() || G.introIdx >= INTRO.length - 1) return;
+    G.introIdx += 1; enterStep(G.introIdx);
+  }
+  function renderDemoDice() {
+    const D = G.demo; const row = el("div", { class: "dice" });
+    for (let i = 0; i < 3; i++) {
+      const v = D.dice[i]; const heard = Array.isArray(D.heard) ? D.heard.includes(i) : D.heard === i; const mark = D.marks[i] || "";
+      const age = D.flipAt ? performance.now() - D.flipAt : Infinity; const anim = mark === "cheatmark" && age < 280;
+      const d = el("div", { class: "die" + (v ? (heard ? " heard" : " shown") : "") + (mark ? " " + mark : "") + (anim ? " flipanim" : "") });
+      if (v) d.append(el("img", { src: `${IMG}die-${v}.webp`, alt: String(v), style: anim ? `animation-delay:-${Math.round(age)}ms` : null }));
+      row.append(d);
+    }
+    if (D.badge) row.append(el("span", { class: "badge" }, D.badge));
+    return row;
+  }
+  function slideCard(title, sub) { return el("div", { class: "slide" }, el("b", {}, title), el("small", {}, sub)); }
+  function renderDemoPanel(p) {
+    const D = G.demo; const sc = D.scene;
+    p.classList.add("demo");
+    if (sc === "bet") {
+      const amt = el("div", { class: "amt" }); [1, 2, 3].forEach((n) => amt.append(el("button", { class: n === 1 ? "on" : "", tabindex: "-1" }, n === 1 ? "押 1 個" : `${n} 個`)));
+      p.append(amt, el("div", { class: "bs" }, el("button", { tabindex: "-1" }, el("b", {}, "小"), el("small", {}, "4–10")), el("button", { tabindex: "-1" }, el("b", {}, "大"), el("small", {}, "11–17"))));
+      if (D.hl.panel) p.classList.add("hl");
+    } else if (sc === "purse") {
+      p.append(slideCard("怎麼贏", `她的 ${HIM} 個贏光，你就贏；你的 ${START} 個輸光，你就輸`));
+    } else if (sc === "grab") {
+      p.append(el("div", { class: "moves" },
+        el("button", { class: "mv open", tabindex: "-1" }, el("b", {}, "正常開")),
+        el("button", { class: "mv grab hl", tabindex: "-1" }, el("b", {}, "抓對手出千")),
+        el("button", { class: "mv swap", tabindex: "-1" }, el("b", {}, "自己出千"))));
+    } else if (sc === "swap" || sc === "swapZones" || sc === "swapHard") {
+      const { ok, caught } = D.zones;
+      p.append(el("div", { class: "bar" },
+        el("div", { class: "z caught", style: `left:0;width:${caught * 100}%` }),
+        el("div", { class: "z fail", style: `left:${caught * 100}%;width:${(0.5 - ok / 2 - caught) * 100}%` }),
+        el("div", { class: "z ok", style: `left:${(0.5 - ok / 2) * 100}%;width:${ok * 100}%` }),
+        el("div", { class: "z fail", style: `left:${(0.5 + ok / 2) * 100}%;width:${(0.5 - ok / 2 - caught) * 100}%` }),
+        el("div", { class: "z caught", style: `right:0;width:${caught * 100}%` }),
+        el("div", { id: "demomarker", class: "marker" })));
+      p.append(el("span", { class: "label legend" + (D.hl.legend ? " hl" : "") }, "綠：換成功　黃：沒換到，照開　紅：被抓"));
+      p.append(el("span", { class: "label legend" }, sc === "swapHard" ? "換第三次：光點更快、綠色更窄" : "按「動手」讓光點停下"));
+    } else if (SLIDE[sc]) p.append(slideCard(SLIDE[sc][0], SLIDE[sc][1]));
+  }
+
+  function startIntro(force) {
+    G = fresh(); G.real = realTell; G.forceIntro = !!force;
+    if (fullIntro()) { G.introIdx = 0; enterStep(0); return; }
+    G.demo = null; G.lines = [introLine(INTRO_AGAIN[0])];
+    render(); introNag(G.tellSeq);
+  }
+
+  // 每個動作配的台詞。一半是閒話，一半是故意讓你多想的話；跟她有沒有動手無關。
+  const MISLEAD = ["「這把我沒動喔。」", "「你覺得我動了？」", "「看那麼認真。」", "「要抓就抓啊。」", "「你押的那邊，我也覺得會開。」", "「手放桌上，我沒碰盅。」"];
+  const SAY = {
+    cup: ["「這盅是我爸留的。」", "「不要一直看我的手。」", "「盅放好了，開不開？」"],
+    drink: ["「你要不要也來一罐？」", "「喝一口手才穩。」", "「這個比你押的還便宜。」"],
+    hair: ["「熱死了。」", "「你看什麼？」", "「髮夾又鬆了。」"],
+    chat: ["「後面那間雜貨店收了，你知道嗎？」", "「我爸以前都坐這個位子。」", "「你媽還好嗎？」", "「小時候你輸了都說肚子痛。」", "「這桌子比我們都老。」", "「你那支錶還在喔。」"],
+    lean: ["「我猜你這把輸。」", "「要不要加碼？」", "「想久一點也可以。」"],
+  };
+  function tellLine(t) { return () => { G.lines.push({ c: "line", t: Math.random() < 0.5 ? pick(MISLEAD) : pick(SAY[t]) }); const box = document.querySelector(".talk"); if (box) box.replaceWith(renderTalk()); }; }
+
+  // ---------- 她的反應（只有台詞，不描述動作） ----------
+  function attitude() {
+    if (G.switched) { G.switched = false; return pick(["「好啦，重來。」", "「你這個人。」"]); }
+    if (G.angry > 0) return pick(["「冤枉我是吧？」", "「再來啊。」"]);
+    if (G.susp >= 0.6) return pick(["「手放桌上。」", "「我在看你喔。」"]);
+    if (G.susp >= 0.3) return pick(["「你今天手很巧喔。」", "「嗯？」"]);
+    if (G.caution > 0) return "「規規矩矩來。」";
+    return pick(["「來，押。」", "「大還小？」", "「快點啦。」", gamesPlayed > 0 ? "「又來了喔。」" : "「坐。」"]);
+  }
+
+  // ---------- 一把的流程 ----------
+  async function newRound() {
+    G.round += 1;
+    G.dice = [rnd(), rnd(), rnd()];
+    G.orig = null; G.heard = null; G.bet = null; G.cheated = false; G.changed = -1;
+    G.result = null; G.rclass = ""; G.note = ""; G.flipped = []; G.flipAt = 0; G.cheatFlipAt = 0; G.noticed = false; G.act = ""; G.shownTells = [];
+    G.amt = Math.min(G.amt, maxAmt());
+    G.lines = [{ c: "line", t: attitude() }];
+    G.diceState = "hidden"; S.hold = null; S.stake = 0;
+    G.phase = "shake"; render();
+    const shakes = []; for (let i = 0; i < 8; i++) shakes.push([i % 2 ? "shake-b" : "shake-a", 100]);
+    if (Math.random() < 0.5) sfx("vIn", 0.5);
+    sfx("shake"); shakes[shakes.length - 1][2] = () => sfx("cupDown", 0.6);
+    await play([...shakes, ["base", 300]]);
+    peek();
+    G.lines.push({ c: "mind", t: pick(BET_CALM) });  // 押注前：用心聲暗示這時她不會有動作
+    G.phase = "bet"; render();
+  }
+  const maxAmt = () => Math.max(1, Math.min(3, G.you, G.him));
+  // 偷看（原本的聽骰，2026-11-08 晚改）：她放下骰盅時，你從盅縫瞄到隨機一到兩顆，一定準。G.heard = [{ i, v }]
+  function peek() {
+    const n = Math.random() < 0.5 ? 1 : 2;
+    const idx = [0, 1, 2].sort(() => Math.random() - 0.5).slice(0, n).sort();
+    G.heard = idx.map((i) => ({ i, v: G.dice[i] }));
+    G.diceState = "heard";
+    G.lines.push({ c: "tell", t: n === 1 ? `她放下骰盅的那一下，你從盅縫瞄到一顆：${G.heard[0].v}。` : `她放下骰盅的那一下，你從盅縫瞄到兩顆：${G.heard[0].v} 和 ${G.heard[1].v}。` });
+  }
+  // 偷看到的哪一顆被她翻了（沒有就是 undefined）
+  const peekChanged = (dice) => (G.heard || []).find((h) => h.v !== dice[h.i]);
+  // 發現她出千：用主角的心聲（括號、暖色），不是旁白
+  const caughtLine = (dice) => { const h = peekChanged(dice); return h ? `（我明明看到是 ${h.v}，開出來卻是 ${dice[h.i]}……她絕對出千了。）` : pick(CAUGHT_LINES); };
+
+  async function placeBet(side) {
+    if (G.phase !== "bet") return;
+    G.bet = { side, amt: G.amt };
+    const wouldWin = sideOf(G.dice) === side;
+    if (wouldWin) {
+      let p = [0, 0.3, 0.4, 0.5][G.amt] + G.susp * 0.1;
+      if (G.him < G.you) p += 0.1;
+      if (G.angry > 0) p += 0.15;
+      if (G.caution > 0) p -= 0.2;
+      if (Math.random() < clamp(p, 0.05, 0.85)) cheatFlip(side);
+    }
+    // 真習慣一定排第一個，雜訊動作排在後面、彼此順序隨機（不然太難）
+    const noise = TELLS.filter((t) => t !== G.real && Math.random() < NOISE).sort(() => Math.random() - 0.5);
+    let planned;
+    if (G.cheated && Math.random() < (G.caution > 0 ? 0.85 : 1)) planned = [G.real, ...noise];
+    else planned = noise.length ? noise : [pick(TELLS.filter((t) => t !== G.real))];  // 沒出千也一定有第一個動作，時間跟出千時一樣
+    S.flick = []; S.noAmbient = true;  // 進抉擇前清掉還在閃的燈，接著關掉隨機燈閃
+    G.shownTells = [];  // 只記真的播出來的
+    G.lines = [{ c: "line", t: `你押${sideName[side]}，${G.amt} 個。` }];
+    S.stake = G.amt; sfx("bet");
+    // 按鈕立刻能按；訊號穿插在你猶豫的時間裡，不定時出現。你一按，沒播到的就不播。
+    G.phase = "open"; G.tellSeq = (G.tellSeq || 0) + 1; render();
+    const run = runTells(planned, G.tellSeq, !G.cheated);
+    if (fast()) await run;
+  }
+  async function runTells(planned, seq, honest) {
+    const alive = () => G.phase === "open" && G.tellSeq === seq;
+    const firstAt = 700 + Math.random() * 1500;  // 第一個動作：出千、沒出千都一樣
+    if (honest && !fast()) {  // 閃法隨機，但只挑閃得完的：閃完才出第一個動作
+      const kinds = Object.keys(FLICK_MAX).filter((k) => 150 + FLICK_MAX[k] + 100 <= firstAt);
+      const kind = pick(kinds); const at = 150 + Math.random() * (firstAt - 250 - FLICK_MAX[kind]);
+      setTimeout(() => { if (alive()) honestFlick(kind); }, at);
+    }
+    for (let k = 0; k < planned.length; k++) {
+      const t = planned[k];
+      await wait(k === 0 ? firstAt : 700 + Math.random() * 1500);
+      if (!alive()) return;
+      if (k === 0) S.noAmbient = false;  // 第一個動作出來之後，燈照常隨機閃
+      G.shownTells.push(t);
+      await play([[`tell-${t}-a`, 150], [`tell-${t}-b`, HOLD, tellLine(t)], [`tell-${t}-a`, 150]]);
+      if (!alive()) return;
+    }
+    // 她沒出千的把：你拖太久，她每 6–9 秒做個動作催你或嗆你。動作避開真破綻，照實記進紀錄表。
+    if (G.cheated || fast()) return;  // 快轉（模擬）不催，不然 while 永遠不結束
+    const pool = DECIDE.filter(([t]) => t !== G.real).sort(() => Math.random() - 0.5); let i = 0;
+    while (alive()) {
+      await wait(6000 + Math.random() * 3000);
+      if (!alive()) return;
+      const [t, line] = pool[i++ % pool.length];
+      G.shownTells.push(t);
+      const say = () => { G.lines.push({ c: "line", t: line }); const box = document.querySelector(".talk"); if (box) box.replaceWith(renderTalk()); if (Math.random() < 0.4) sfx("vHmm", 0.5); };
+      await play([[`tell-${t}-a`, 150], [`tell-${t}-b`, HOLD, say], [`tell-${t}-a`, 150]]);
+    }
+  }
+  function stopTells() { G.tellSeq = (G.tellSeq || 0) + 1; S.noAmbient = false; if (S.tl) { const r = S.tl.res; S.tl = null; r(); } }
+
+  function cheatFlip(side) {
+    const d = G.dice.slice();
+    const order = [0, 1, 2].sort(() => Math.random() - 0.5);
+    for (const i of order) {
+      const vals = [1, 2, 3, 4, 5, 6].filter((v) => { const nd = d.slice(); nd[i] = v; return sideOf(nd) !== side && !isTriple(nd); });
+      if (vals.length) { G.orig = G.dice.slice(); G.dice[i] = pick(vals); G.changed = i; G.cheated = true; G.stats.cheats += 1; return; }
+    }
+  }
+  // 換骰成功：真的把一顆翻到你押的那邊，開出來的骰子才對得上
+  function flipToward(side) {
+    const d = G.dice.slice(); const order = [0, 1, 2].sort(() => Math.random() - 0.5);
+    if (G.changed >= 0) { order.splice(order.indexOf(G.changed), 1); order.push(G.changed); }  // 她翻過的那顆排最後，兩個標籤不疊在同一顆
+    for (const i of order) {  // 先試翻一顆
+      // 一定換成不同的點數：原本就贏的時候也要看得到你撥了一顆
+      const vals = [1, 2, 3, 4, 5, 6].filter((v) => { if (v === d[i]) return false; const nd = d.slice(); nd[i] = v; return sideOf(nd) === side; });
+      if (vals.length) { G.dice[i] = pick(vals); return; }
+    }
+    // 一顆到不了（例如 2,1,1 要變大），翻兩顆：固定一顆，另外兩顆隨機找一組
+    const keep = order[0]; const combos = [];
+    for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) { const nd = d.slice(); nd[(keep + 1) % 3] = a; nd[(keep + 2) % 3] = b; if (sideOf(nd) === side && nd.some((x, j) => x !== d[j])) combos.push(nd); }
+    if (combos.length) G.dice = pick(combos);
+  }
+
+  function settle(win, amt) {
+    if (win) { G.you += amt; G.him -= amt; G.result = `+${amt}`; G.rclass = "win"; sfx("win", 0.6); if (Math.random() < 0.3) sfx("vSigh", 0.6); }
+    else { G.you -= amt; G.him += amt; G.result = `−${amt}`; G.rclass = "lose"; sfx("lose", 0.5); }
+  }
+
+  function afterRound() {
+    if (G.caution > 0) G.caution -= 1;
+    if (G.angry > 0) G.angry -= 1;
+    G.susp = clamp(G.susp - 0.03, 0, 1);
+    G.log.push({ n: G.round, bet: `${sideName[G.bet.side]} ${G.bet.amt}`, tells: G.shownTells.slice(), act: G.act, res: G.result, cheated: G.cheated, noticed: G.noticed || (G.act === "抓千" && G.cheated) });
+    G.loseStreak = (G.result || "").includes("−") ? G.loseStreak + 1 : 0;
+    S.stake = 0;
+    if (G.you <= 0 || G.him <= 0) { gamesPlayed += 1; saveTell(); }
+    G.phase = (G.you <= 0 || G.him <= 0) ? "endwait" : "result";
+    render();
+    showResultPop();
+  }
+  // 每把結束：正中間跳出「點數總和、大小、輸贏」，約 2 秒後自己淡掉。不擋點擊，下面的結果卡照留
+  function showResultPop() {
+    if (fast()) return;
+    document.querySelectorAll(".pop").forEach((n) => n.remove());
+    const shown = G.diceState === "shown"; const sd = sideOf(G.dice);
+    const top = shown ? `${sum(G.dice)} 點　${sd === "triple" ? "豹子" : sideName[sd]}` : "沒開盅";
+    const r = G.result || "";
+    const res = r.startsWith("+") ? `你贏了 ${r}` : r.startsWith("−") ? `你輸了 ${r}` : r;
+    const pop = el("div", { class: "pop " + G.rclass, role: "status" }, el("b", {}, top), el("span", {}, res));
+    const sr = sceneWrap && sceneWrap.getBoundingClientRect();  // 放在桌面畫面正中，不擋到下方骰子
+    if (sr && sr.height) pop.style.top = (sr.top + sr.height / 2) + "px";
+    document.body.append(pop);
+    setTimeout(() => pop.remove(), 2100);
+  }
+
+  const BET_CALM = ["（我盯著她的手。她似乎不敢輕舉妄動。）", "（我一直看著她，她的手乖乖放在桌上。）", "（我盯著她，她連菸都沒碰。現在不敢亂來。）"];
+  const SWITCH_HINTS = ["（她把手收回去，坐姿也換了。她變謹慎了，下一把的小動作大概不一樣。）", "（她盯著自己的手看了一下。這招被我看穿，她會換別的習慣。）", "（她的眼神變了。接下來她會更小心，破綻也會換一個。）"];
+  const CAUGHT_LINES = ["（那顆骰子停的位置不對，像是被按過……她絕對出千了。）", "（有一顆的面不對勁，被翻過了……她出千了。）", "（剛剛那一下，她的手指碰了盅裡的骰子……騙不了我。）"];
+  async function openCup() {
+    if (G.phase !== "open") return;
+    stopTells();
+    G.act = "開"; G.phase = "reveal";
+    const notice = G.cheated && Math.random() < NOTICE;  // NOTICE = 1：她出千，開盅一定看得出來
+    const cheatedDice = G.dice.slice();
+    if (notice && G.orig) G.dice = G.orig.slice();  // 先開出她翻之前的點數
+    G.diceState = "shown"; render();  // 盅一抬起，下面那列就亮出點數
+    sfx("cupLift", 0.5); sfx("diceShow", 0.6);
+    await play([["cup-open", 500]]);
+    S.hold = null;  // 開完回待機
+    if (notice) {
+      if (G.orig) await wait(300);  // 原本的點數亮 0.8 秒
+      G.dice = cheatedDice; G.noticed = true; G.cheatFlipAt = performance.now();  // 再翻成她的點數
+      G.lines.push({ c: "mind", t: caughtLine(G.dice) });
+      render(); sfx("diceShow", 0.35);
+    }
+    const s = sideOf(G.dice);
+    const win = s === G.bet.side;
+    if (s === "triple") G.lines.push({ c: "act", t: "三顆一樣，這叫豹子。不管押大押小，都算莊家贏。" });
+    settle(win, G.bet.amt);  // 豹子時 win 一定是 false：算你輸
+    if (!notice && !win && G.bet.amt >= 2) G.lines.push({ c: "line", t: pick(["「差一點啊。」", "「再來。」"]) });
+    await wait(400);
+    if (!win && G.bet.amt >= 2) { sfx("vSmug", 0.7); await play([["expr-smug", 1200]]); S.hold = null; }
+    afterRound();
+  }
+
+  async function grab() {
+    if (G.phase !== "open") return;
+    stopTells();
+    G.act = "抓千"; G.phase = "reveal"; render();
+    const a = G.bet.amt;
+    synth("thud");
+    if (G.cheated) {
+      await play([["hand-grab", 500]]);
+      S.hold = "hand-grab-caught"; G.diceState = "shown"; render(); sfx("grab", 0.7); sfx("vCaught", 0.8);
+      const gain = Math.min(G.him, a * 3);
+      G.you += gain; G.him -= gain;
+      G.result = `抓到了 +${gain}`; G.rclass = "win";
+      G.stats.caught += 1; G.caution = 3;
+      const old = G.real; while (G.real === old) G.real = pick(TELLS);
+      realTell = G.real; saveTell(); G.switched = true;
+      G.lines.push({ c: "line", t: "你按住她的手腕。掀開盅，有一顆骰子還卡在她指縫。" });
+      G.lines.push({ c: "line", t: G.stats.caught === 1 ? "「……我爸說你爸也抓過他一次。」" : "「夠了喔。」" });
+      // 暗示她換了習慣、這幾把會比較小心（程式裡 G.real 已換、caution 3 把）
+      G.lines.push({ c: "mind", t: pick(SWITCH_HINTS) });
+    } else {
+      await play([["hand-grab", 500]]);
+      S.hold = "expr-angry"; G.diceState = "shown"; render(); synth("slap", 0.8); sfx("vAngry", 0.7);
+      const loss = Math.min(G.you, a * 2);
+      G.you -= loss; G.him += loss;
+      G.result = `抓錯了 −${loss}`; G.rclass = "lose";
+      G.stats.wrong += 1; G.angry = 3;
+      G.lines.push({ c: "line", t: `你按住她的手。盅底乾乾淨淨，${sum(G.dice)} 點。` });
+      G.lines.push({ c: "line", t: "「冤枉人，要付錢的。」" });
+    }
+    await wait(900);
+    afterRound();
+  }
+
+  // 換骰：橫移命中小遊戲。畫面上主角的手伸向盅。
+  function swapZones() {
+    const streak = G.swapUses || 0;
+    const ok = clamp(0.22 - streak * 0.05 - G.susp * 0.1, 0.08, 0.22);      // duel-sicbo 原值 0.30
+    const caught = clamp(0.2 + streak * 0.03 + G.susp * 0.1, 0.2, 0.36);     // duel-sicbo 原值 0.16
+    return { ok, caught, speed: 0.9 + streak * 0.35 };
+  }
+  function swap() {
+    if (G.phase !== "open") return;
+    stopTells();
+    G.phase = "swap"; G.swapT0 = performance.now();
+    S.hold = "hand-swap";
+    render();
+    const tick = () => { if (G.phase !== "swap") return; renderMarker(); requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }
+  function markerPos() { const { speed } = swapZones(); const t = (performance.now() - G.swapT0) / 1000 * speed; const x = t % 2; return x <= 1 ? x : 2 - x; }
+  function renderMarker() { const m = document.getElementById("marker"); if (m) m.style.left = `${markerPos() * 100}%`; }
+  async function swapStop() {
+    if (G.phase !== "swap") return;
+    const x = markerPos(); const { ok, caught } = swapZones(); const a = G.bet.amt;
+    G.swapFrozen = { ok, caught };  // 凍結畫面用按下那一刻的區域；次數加一後區域會縮，不能重算
+    G.swapUses = (G.swapUses || 0) + 1;
+    G.phase = "swapfreeze"; G.swapX = x;
+    G.swapZone = Math.abs(x - 0.5) <= ok / 2 ? "ok" : (x < caught || x > 1 - caught) ? "caught" : "fail";
+    render();
+    await wait(900);
+    G.act = "換骰"; G.phase = "reveal"; render();
+    if (G.swapZone === "ok") {
+      const before = G.dice.slice(); flipToward(G.bet.side); const after = G.dice.slice();
+      G.stats.swapOk += 1; G.susp = clamp(G.susp + 0.12, 0, 1);
+      const herFlip = G.cheated && G.orig;  // 她也出千：一樣看得出來
+      G.dice = herFlip ? G.orig.slice() : before;  // 先開出原本的點數
+      S.hold = null; G.diceState = "shown"; render(); sfx("diceShow", 0.6);  // 盅一抬起就亮出原本的點數
+      await play([["cup-open", 500]]);
+      await wait(300);  // 原本的點數亮 0.8 秒再翻
+      if (herFlip) {
+        G.dice = before; G.noticed = true; G.cheatFlipAt = performance.now();  // 先翻她的
+        G.lines.push({ c: "mind", t: caughtLine(G.dice) });
+        render(); sfx("diceShow", 0.35);
+        await wait(800);
+      }
+      G.dice = after; G.flipped = [0, 1, 2].filter((i) => before[i] !== after[i]); G.flipAt = performance.now();  // 再翻成撥過的
+      G.lines.push({ c: "line", t: G.flipped.length > 1 ? "掀盅的瞬間，你用小指撥了兩顆。" : "掀盅的瞬間，你用小指撥了一顆。" });
+      render(); sfx("diceShow", 0.35);
+      settle(true, a);
+      G.lines.push({ c: "line", t: G.cheated ? "她盯著骰子看了很久，什麼都沒說。" : "「……」她皺了一下眉。" });
+      await wait(600);
+      afterRound();
+    } else if (G.swapZone === "caught") {
+      S.hold = "hand-swap-caught"; render(); synth("slap", 0.9); sfx("swapCaught", 0.6); sfx("vAngry", 0.7);
+      const loss = Math.min(G.you, a * 3);
+      G.you -= loss; G.him += loss;
+      G.result = `被抓 −${loss}`; G.rclass = "lose";
+      G.stats.swapBad += 1; G.susp = clamp(G.susp + 0.35, 0, 1);
+      G.lines.push({ c: "line", t: "你的小指剛碰到骰子，手腕就被扣住了。" });
+      G.lines.push({ c: "line", t: "「在我這裡玩這個？」她從你那堆籌碼裡拿走三倍。" });
+      await wait(1200);
+      afterRound();
+    } else {
+      G.susp = clamp(G.susp + 0.05, 0, 1);
+      G.lines.push({ c: "line", t: "手指滑了一下，沒碰到骰子。只能照開。" });
+      S.hold = null; G.phase = "open"; await openCup();
+    }
+  }
+
+  // ---------- 畫面 ----------
+  let sceneWrap, purseL, purseR;
+  function render() {
+    const app = document.getElementById("app");
+    app.innerHTML = "";
+    // 順序：籌碼｜場景｜籌碼、骰子列、對話框、操作區（2026-11-08：場景縮小，籌碼改放場景兩側）
+    sceneWrap.querySelector(".tag").textContent = G.phase === "intro" ? "" : `第 ${G.round} 把` + (G.bet ? `　押${sideName[G.bet.side]} ${G.bet.amt} 個` : "");
+    app.append(renderRow());
+    sceneWrap.classList.toggle("hl", !!(G.phase === "intro" && G.demo && G.demo.hl.scene));
+    // 押完到開盅之前（抉擇階段），外框一閃一閃：提示這段時間她可能露出破綻。說明那頁也用同一個
+    sceneWrap.classList.toggle("watch", G.phase === "open" || !!(G.phase === "intro" && G.demo && G.demo.scene === "watch"));
+    const lower = el("div", { class: "lower" }, renderDice(), renderTalk(), renderPanel());
+    if (G.phase === "intro" && fullIntro()) lower.addEventListener("click", nextIntro);  // 說明時點下半部任何地方都是下一步
+    if (G.phase === "swap" || G.phase === "swapfreeze") lower.append(renderSwapBox());  // 換骰：另一個框蓋住下面所有區域
+    app.append(lower);
+    if (G.phase === "end") app.append(el("div", { class: "overlay" }, renderEnd()));  // 結算：全螢幕蓋住
+  }
+
+  function renderTalk() {
+    const lines = el("div", { class: "lines" });
+    G.lines.slice(-3).forEach((l) => lines.append(el("p", { class: l.c }, l.t)));
+    if (G.note && (G.phase === "result" || G.phase === "endwait")) lines.append(el("p", { class: "act" }, G.note));
+    const tab = G.phase === "intro" && fullIntro() && G.introIdx < INTRO.length - 1
+      ? el("button", { class: "nexttab", onclick: (e) => { e.stopPropagation(); nextIntro(); } }, `${G.introIdx + 1} / ${INTRO.length}　下一步 ▶`) : null;
+    const who = G.phase === "intro" && G.lines[0] && G.lines[0].c === "act" ? "旁白" : "木子";
+    return el("div", { class: "talk" }, el("span", { class: "who" }, who), tab, lines);  // 固定高度，新句子從底下疊上來，舊的被推出去
+  }
+
+  const PURSE_CAP = 20;  // 籌碼窗固定畫 20 個的高度；超過就不再長高，畫面不跳。數字照實
+  function purse(canvas, color, n) {
+    const scale = 40 / img["chip-top-" + color].width;
+    const h = Math.ceil(stackHeight(color, PURSE_CAP, scale)) + 2;
+    canvas.width = 40; canvas.height = h; canvas.style.height = h + "px";
+    const c = canvas.getContext("2d"); c.clearRect(0, 0, 40, h);
+    if (n > 0) drawStack(c, color, Math.min(n, PURSE_CAP), 20, h - 1, scale);
+  }
+  function renderRow() {
+    purse(purseL, "black", G.him); purse(purseR, "red", G.you);
+    const hlPurse = G.phase === "intro" && G.demo && G.demo.hl.purse;
+    // 三欄：她的籌碼｜場景（縮小）｜你的籌碼；骰子列、對話框在下面整排
+    return el("div", { class: "row" },
+      el("div", { class: "purse" + (hlPurse ? " hl" : "") }, el("span", { class: "who" }, "木子"), purseL, el("span", { class: "n" }, String(G.him))),
+      sceneWrap,
+      el("div", { class: "purse me" + (hlPurse ? " hl" : "") }, el("span", { class: "who" }, "你"), purseR, el("span", { class: "n" }, String(G.you))));
+  }
+  function renderDice() {
+    if (G.phase === "intro" && G.demo && G.demo.dice) return renderDemoDice();
+    const dice = el("div", { class: "dice" });
+    for (let i = 0; i < 3; i++) {
+      const shown = G.diceState === "shown";
+      const hp = G.diceState === "heard" && G.heard ? G.heard.find((h) => h.i === i) : null;
+      const heard = !!hp;
+      const v = shown ? G.dice[i] : hp ? hp.v : null;
+      const flipped = shown && (G.flipped || []).includes(i);
+      const cheatMarked = shown && G.noticed && G.changed === i && !flipped;
+      const flipAge = flipped && G.flipAt ? performance.now() - G.flipAt : cheatMarked && G.cheatFlipAt ? performance.now() - G.cheatFlipAt : Infinity;
+      const anim = (flipped || cheatMarked) && flipAge < 280;
+      const cls = "die" + (shown ? " shown" : heard ? " heard" : "") + (G.phase === "shake" ? " shake" : "") + (shown && G.noticed && G.changed === i ? " cheatmark" : "") + (flipped ? " flipped" : "") + (anim ? " flipanim" : "");
+      const d = el("div", { class: cls });
+      if (v) d.append(el("img", { src: `${IMG}die-${v}.webp`, alt: String(v), style: anim ? `animation-delay:-${Math.round(flipAge)}ms` : null }));
+      dice.append(d);
+    }
+    return dice;
+  }
+
+  function renderPanel() {
+    const p = el("div", { class: "panel" });
+    if (G.phase === "intro") {
+      const last = fullIntro() ? G.introIdx >= INTRO.length - 1 : true;
+      if (last) p.append(el("button", { class: "next", onclick: () => { stopTells(); G.demo = null; newRound(); } }, "坐下"));
+      else renderDemoPanel(p);
+    } else if (G.phase === "shake") {
+      p.append(el("p", { class: "wait" }, "她在搖盅……"));
+    } else if (G.phase === "bet") {
+      const amt = el("div", { class: "amt" });
+      for (let n = 1; n <= 3; n++) amt.append(el("button", { class: G.amt === n ? "on" : "", disabled: n > maxAmt(), onclick: () => { G.amt = n; render(); } }, G.amt === n ? `押 ${n} 個` : `${n} 個`));
+      p.append(amt);
+      p.append(el("div", { class: "bs" },
+        el("button", { onclick: () => placeBet("small") }, el("b", {}, "小"), el("small", {}, "4–10")),
+        el("button", { onclick: () => placeBet("big") }, el("b", {}, "大"), el("small", {}, "11–17"))));
+    } else if (G.phase === "open") {
+      p.append(el("div", { class: "moves" },
+        el("button", { class: "mv open", onclick: openCup }, el("b", {}, "正常開")),
+        el("button", { class: "mv grab", onclick: grab }, el("b", {}, "抓對手出千")),
+        el("button", { class: "mv swap", onclick: swap }, el("b", {}, "自己出千"))));
+    } else if (G.phase === "swap" || G.phase === "swapfreeze") {
+      p.append(el("p", { class: "wait" }, "……"));  // 被換骰框蓋住
+    } else if (G.phase === "reveal") {
+      p.append(el("p", { class: "wait" }, "……"));
+    } else if (G.phase === "result" || G.phase === "endwait") {
+      const sd = sideOf(G.dice);
+      p.append(el("div", { class: "card " + G.rclass },
+        el("span", { class: "sum" }, `${sum(G.dice)} 點`),
+        el("span", { class: "bs2" }, sd === "triple" ? `豹子　你押${sideName[G.bet.side]}` : `${sideName[sd]}　你押${sideName[G.bet.side]}`),
+        el("span", { class: "net" }, G.result || "")));
+      if (G.phase === "result") {
+        p.append(el("button", { class: "next", onclick: newRound }, "下一把"));
+      }
+      else p.append(el("button", { class: "next", onclick: () => { G.phase = "end"; render(); } }, G.you <= 0 ? "籌碼沒了" : "她的籌碼沒了"));
+    }
+    return p;
+  }
+  function renderSwapBox() {
+    const p = el("div", { class: "swapbox" });
+    {
+      const frozen = G.phase === "swapfreeze"; const { ok, caught } = frozen ? G.swapFrozen : swapZones();
+      const bar = el("div", { class: "bar" },
+        el("div", { class: "z caught", style: `left:0;width:${caught * 100}%` }),
+        el("div", { class: "z fail", style: `left:${caught * 100}%;width:${(0.5 - ok / 2 - caught) * 100}%` }),
+        el("div", { class: "z ok", style: `left:${(0.5 - ok / 2) * 100}%;width:${ok * 100}%` }),
+        el("div", { class: "z fail", style: `left:${(0.5 + ok / 2) * 100}%;width:${(0.5 - ok / 2 - caught) * 100}%` }),
+        el("div", { class: "z caught", style: `right:0;width:${caught * 100}%` }),
+        el("div", { id: "marker", class: "marker" + (frozen ? " frozen" : ""), style: frozen ? `left:${G.swapX * 100}%` : "" }));
+      const n = G.swapUses + (frozen ? 0 : 1);
+      const watch = n <= 1 ? "她在看別桌。" : n === 2 ? "她的眼角瞄著你的手。" : n === 3 ? "她往前傾，盯著盅。" : n === 4 ? "她的手已經放在盅邊。" : "她沒在看骰子了，她只看你。";
+      p.append(el("p", { class: "title" }, "自己出千"));
+      p.append(el("p", { class: "watch" }, watch));
+      p.append(bar);
+      p.append(el("span", { class: "label", style: "text-align:center" }, "綠：換成功　黃：沒換到，照開　紅：被抓"));
+      if (frozen) p.append(el("p", { class: "zone " + G.swapZone }, { ok: "成功", fail: "沒換到", caught: "被發現" }[G.swapZone]));
+      else p.append(el("button", { class: "next stop", onclick: swapStop }, "動手"));
+    }
+    return p;
+  }
+
+  function thumb(tell) {
+    const [x, y, w, h] = TELL_CROP[tell];
+    const c = document.createElement("canvas"); c.width = 88; c.height = 88;
+    const src = img[`tell-${tell}-b`]; const k = Math.max(88 / w, 88 / h);
+    c.getContext("2d").drawImage(src, x, y, w, h, (88 - w * k) / 2, (88 - h * k) / 2, w * k, h * k);
+    c.title = TELL_NAME[tell];
+    return c;
+  }
+  function renderLog() {
+    const t = el("table", { class: "log" }, el("thead", {}, el("tr", {}, ["把", "押", "她的動作", "你", "結果", "她"].map((h) => el("th", {}, h)))));
+    const tb = el("tbody");
+    for (const r of G.log) tb.append(el("tr", { class: r.cheated ? "cheat" : "" },
+      el("td", {}, r.n), el("td", {}, r.bet),
+      el("td", {}, r.tells.length ? el("div", { class: "thumbs" }, r.tells.map(thumb)) : "—"),
+      el("td", {}, r.act), el("td", { class: r.res && r.res.includes("+") ? "w" : "l" }, r.res || ""), el("td", {}, r.noticed ? "出千" : r.cheated ? "出千（你沒發現）" : "")));
+    t.append(tb);
+    return el("div", { class: "logwrap" }, t);
+  }
+  const HINT = "出千的那幾把，總有一個動作特別常出現。她下一局還是這個習慣，除非你抓到她。";
+  function renderEnd() {
+    const won = G.him <= 0; const s = G.stats;
+    return el("div", { class: "sheet" },
+      el("h2", {}, won ? "她的籌碼沒了" : "你的籌碼沒了"),
+      el("p", {}, won ? "她把空盅推給你：「明天再來。」" : "她把籌碼收進抽屜：「慢走。」"),
+      el("p", { class: "act" }, "木子還是那個木子。她的習慣沒變，除非被你抓到。"),
+      // 提示：輸光才給，按了才出現那句話（放在紀錄表這頁，對著表看）
+      won ? null : G.hintShown ? el("p", { class: "tell" }, HINT) : el("button", { class: "hint", onclick: () => { G.hintShown = true; render(); } }, "提示"),
+      el("div", { class: "stats" },
+        el("span", {}, "總共開了"), el("b", {}, `${G.round} 把`),
+        el("span", {}, "她出千"), el("b", {}, `${s.cheats} 次`),
+        el("span", {}, "你抓到"), el("b", {}, `${s.caught} 次`),
+        el("span", {}, "你抓錯"), el("b", {}, `${s.wrong} 次`),
+        el("span", {}, "你換骰"), el("b", {}, `成功 ${s.swapOk}，失手 ${s.swapBad}`),
+        ),
+      el("button", { class: "next", onclick: () => { G = fresh(); newRound(); } }, "再賭一局"),
+      el("button", { class: "hint", onclick: () => startIntro(true) }, "從說明開始"),
+      el("details", { class: "logbox", open: true },
+        el("summary", {}, "每把紀錄"),
+        renderLog()));
+  }
+
+  // ---------- 啟動 ----------
+  function resetAll() {
+    try { localStorage.removeItem("muzi_tell"); localStorage.removeItem("muzi_games"); } catch (e) {}
+    gamesPlayed = 0; realTell = pick(TELLS);
+    stopTells(); G.phase = "none"; startIntro(false);
+  }
+  async function boot() {
+    const app = document.getElementById("app");
+    const rb = el("button", { class: "reset", onclick: () => { if (rb.dataset.arm) { rb.dataset.arm = ""; rb.textContent = "清零重來"; resetAll(); } else { rb.dataset.arm = "1"; rb.textContent = "確定？"; setTimeout(() => { rb.dataset.arm = ""; rb.textContent = "清零重來"; }, 2500); } } }, "清零重來");
+    document.body.append(rb);
+    const mb = el("button", { class: "reset mute", onclick: () => { SFX.muted = !SFX.muted; try { localStorage.setItem("muzi_mute", SFX.muted ? "1" : "0"); } catch (e) {} mb.textContent = SFX.muted ? "靜音" : "有聲"; audioCtx(); } }, SFX.muted ? "靜音" : "有聲");
+    document.body.append(mb);
+    document.addEventListener("pointerdown", () => audioCtx(), { once: true });  // 手機要先有一次點擊才准出聲
+    app.append(el("p", { class: "wait" }, "載入中……"));
+    await Promise.all([...FRAMES, ...PROPS].map(load));
+    loadSfx();
+    sceneCv = el("canvas", { width: W, height: H });
+    sceneCtx = sceneCv.getContext("2d");
+    sceneWrap = el("div", { class: "scene" }, sceneCv, el("span", { class: "tag" }, ""));
+    purseL = document.createElement("canvas"); purseR = document.createElement("canvas");
+    S.nextBlink = performance.now() + 2500; S.nextFlick = performance.now() + 4000;
+    G = fresh();
+    startIntro();
+    requestAnimationFrame(loop);
+    window.__G = () => G;
+    window.__fn = { newRound, placeBet, openCup, grab, swap, swapStop, swapZones, fresh: () => { G = fresh(); }, setX: (x) => { G.swapT0 = performance.now() - x / swapZones().speed * 1000; } };
+  }
+  boot();
+})();
+</script>
+</html>
