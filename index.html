@@ -155,7 +155,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const IMG = "img/";
   const FRAMES = ["base", "expr-blink", "expr-tease", "expr-smug", "expr-suspicious", "expr-caught", "expr-nostalgia", "expr-angry",
     "tell-cup-a", "tell-cup-b", "tell-drink-a", "tell-drink-b", "tell-hair-a", "tell-hair-b", "tell-chat-a", "tell-chat-b", "tell-lean-a", "tell-lean-b",
-    "shake-a", "shake-b", "cup-open", "hand-grab", "hand-grab-caught", "hand-swap", "hand-swap-caught"];
+    "shake-a", "shake-b", "cup-open", "hand-grab", "hand-grab-caught", "hand-grab-shamed", "hand-swap", "hand-swap-caught"];
   const PROPS = ["die-1", "die-2", "die-3", "die-4", "die-5", "die-6", "chip-top-black", "chip-side-black", "chip-bottom-black", "chip-top-red", "chip-side-red", "chip-bottom-red"];
   const W = 656, H = 656, LAMP = [121, 37, 534, 51];
 
@@ -339,12 +339,18 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     const top = img["chip-top-" + color], side = img["chip-side-" + color], bot = img["chip-bottom-" + color];
     if (!top || n <= 0) return;
     const w = top.width * scale; let y = bottomY; const x = cx - w / 2;
-    if (n >= 2) { y -= bot.height * scale; ctx.drawImage(bot, x, y, w, bot.height * scale); }
+    if (n === 1) {  // 單顆：頂面往下疊進底邊一片側片的高度，再把有弧度的底邊蓋上去，不然底下會被切平
+      const yb = bottomY - bot.height * scale;
+      ctx.drawImage(top, x, yb + side.height * scale - top.height * scale, w, top.height * scale);
+      ctx.drawImage(bot, x, yb, w, bot.height * scale); return;
+    }
+    y -= bot.height * scale; ctx.drawImage(bot, x, y, w, bot.height * scale);
     for (let i = 0; i < Math.max(0, n - 2); i++) { y -= side.height * scale; ctx.drawImage(side, x, y, w, side.height * scale); }
     y -= top.height * scale; ctx.drawImage(top, x, y, w, top.height * scale);
   }
   function stackHeight(color, n, scale) {
     const top = img["chip-top-" + color], side = img["chip-side-" + color], bot = img["chip-bottom-" + color];
+    if (n === 1) return scale * (top.height + bot.height - side.height);
     return scale * (top.height + (n >= 2 ? bot.height : 0) + Math.max(0, n - 2) * side.height);
   }
   function loop(now) { drawScene(now); requestAnimationFrame(loop); }
@@ -467,7 +473,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       setTimeout(() => { if (tutAlive(tok)) one(); }, 400); tutLoop(tok, 2000, one);
     } else if (sc === "grab") {
       D.hl.grab = true;
-      const once = async () => { S.hold = null; await play([["hand-grab", 500]]); if (!tutAlive(tok)) return; S.hold = "hand-grab-caught"; setTimeout(() => { if (tutAlive(tok)) S.hold = null; }, 1500); };
+      const once = async () => { S.hold = null; await play([["hand-grab", 500]]); if (!tutAlive(tok)) return; S.hold = "hand-grab-caught"; shameLater(); setTimeout(() => { if (tutAlive(tok)) S.hold = null; }, 2000); };
       setTimeout(() => { if (tutAlive(tok)) once(); }, 500); tutLoop(tok, 3800, once);
     } else if (sc === "swap" || sc === "swapZones" || sc === "swapHard") {
       S.hold = "hand-swap"; D.hl.legend = sc === "swapZones";
@@ -561,7 +567,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     G.result = null; G.rclass = ""; G.note = ""; G.flipped = []; G.flipAt = 0; G.cheatFlipAt = 0; G.noticed = false; G.act = ""; G.shownTells = [];
     G.amt = Math.min(G.amt, maxAmt());
     G.lines = [{ c: "line", t: attitude() }];
-    G.diceState = "hidden"; S.hold = null; S.stake = 0;
+    G.diceState = "hidden"; S.hold = null; S.stake = 0; S.purseHold = null;
     G.phase = "shake"; render();
     const shakes = []; for (let i = 0; i < 8; i++) shakes.push([i % 2 ? "shake-b" : "shake-a", 100]);
     if (Math.random() < 0.5) sfx("vIn", 0.5);
@@ -675,11 +681,14 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     G.susp = clamp(G.susp - 0.03, 0, 1);
     G.log.push({ n: G.round, bet: `${sideName[G.bet.side]} ${G.bet.amt}`, tells: G.shownTells.slice(), act: G.act, res: G.result, cheated: G.cheated, noticed: G.noticed || (G.act === "抓千" && G.cheated) });
     G.loseStreak = (G.result || "").includes("−") ? G.loseStreak + 1 : 0;
-    S.stake = 0;
     if (G.you <= 0 || G.him <= 0) { gamesPlayed += 1; saveTell(); }
     G.phase = (G.you <= 0 || G.him <= 0) ? "endwait" : "result";
-    render();
-    showResultPop();
+    // 籌碼增減（右邊兩疊、桌上押的那疊）跟彈窗同一拍
+    const settle = () => { S.purseHold = null; S.stake = 0; render(); showResultPop(); };
+    if (G.act === "抓千" && !fast()) {  // 抓千那把：先讓她的反應演完再一起結算，免得彈窗蓋住臉
+      render();
+      const n = G.round; setTimeout(() => { if (G.round === n && (G.phase === "result" || G.phase === "endwait")) settle(); }, 1600);
+    } else settle();
   }
   // 每把結束：正中間跳出「點數總和、大小、輸贏」，約 2 秒後自己淡掉。不擋點擊，下面的結果卡照留
   function showResultPop() {
@@ -688,8 +697,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     const shown = G.diceState === "shown"; const sd = sideOf(G.dice);
     const top = shown ? `${sum(G.dice)} 點　${sd === "triple" ? "豹子" : sideName[sd]}` : "沒開盅";
     const r = G.result || "";
-    const res = r.startsWith("+") ? `你贏了 ${r}` : r.startsWith("−") ? `你輸了 ${r}` : r;
-    const pop = el("div", { class: "pop " + G.rclass, role: "status" }, el("b", {}, top), el("span", {}, res));
+    let head = top, res = r.startsWith("+") ? `你贏了 ${r}` : r.startsWith("−") ? `你輸了 ${r}` : r;
+    if (G.act === "抓千") { const m = r.match(/^(抓到了|抓錯了)\s*(.*)$/); if (m) { head = m[1]; res = m[2]; } }  // 抓千那把不講點數，只講抓到沒
+    const pop = el("div", { class: "pop " + G.rclass, role: "status" }, el("b", {}, head), el("span", {}, res));
     const sr = sceneWrap && sceneWrap.getBoundingClientRect();  // 放在桌面畫面正中，不擋到下方骰子
     if (sr && sr.height) pop.style.top = (sr.top + sr.height / 2) + "px";
     document.body.append(pop);
@@ -726,15 +736,17 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     afterRound();
   }
 
+  // 被抓：先驚訝 0.6 秒，再換成憤怒加屈辱，停到下一把
+  function shameLater() { setTimeout(() => { if (S.hold === "hand-grab-caught") S.hold = "hand-grab-shamed"; }, fast() ? 0 : 600); }
   async function grab() {
     if (G.phase !== "open") return;
     stopTells();
-    G.act = "抓千"; G.phase = "reveal"; render();
+    G.act = "抓千"; G.phase = "reveal"; S.purseHold = { you: G.you, him: G.him }; render();  // 籌碼先不動，跟彈窗同一拍才變
     const a = G.bet.amt;
     synth("thud");
     if (G.cheated) {
       await play([["hand-grab", 500]]);
-      S.hold = "hand-grab-caught"; G.diceState = "shown"; render(); sfx("grab", 0.7); sfx("vCaught", 0.8);
+      S.hold = "hand-grab-caught"; shameLater(); G.diceState = "shown"; render(); sfx("grab", 0.7); sfx("vCaught", 0.8);
       const gain = Math.min(G.him, a * 3);
       G.you += gain; G.him -= gain;
       G.result = `抓到了 +${gain}`; G.rclass = "win";
@@ -862,13 +874,14 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (n > 0) drawStack(c, color, Math.min(n, PURSE_CAP), 20, h - 1, scale);
   }
   function renderRow() {
-    purse(purseL, "black", G.him); purse(purseR, "red", G.you);
+    const pv = S.purseHold || G;
+    purse(purseL, "black", pv.him); purse(purseR, "red", pv.you);
     const hlPurse = G.phase === "intro" && G.demo && G.demo.hl.purse;
     // 三欄：她的籌碼｜場景（縮小）｜你的籌碼；骰子列、對話框在下面整排
     return el("div", { class: "row" },
-      el("div", { class: "purse" + (hlPurse ? " hl" : "") }, el("span", { class: "who" }, "木子"), purseL, el("span", { class: "n" }, String(G.him))),
+      el("div", { class: "purse" + (hlPurse ? " hl" : "") }, el("span", { class: "who" }, "木子"), purseL, el("span", { class: "n" }, String(pv.him))),
       sceneWrap,
-      el("div", { class: "purse me" + (hlPurse ? " hl" : "") }, el("span", { class: "who" }, "你"), purseR, el("span", { class: "n" }, String(G.you))));
+      el("div", { class: "purse me" + (hlPurse ? " hl" : "") }, el("span", { class: "who" }, "你"), purseR, el("span", { class: "n" }, String(pv.you))));
   }
   function renderDice() {
     if (G.phase === "intro" && G.demo && G.demo.dice) return renderDemoDice();
