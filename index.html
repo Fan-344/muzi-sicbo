@@ -974,7 +974,6 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     return el("div", { class: "sheet" },
       el("h2", {}, won ? "她的籌碼沒了" : "你的籌碼沒了"),
       el("p", {}, won ? "她把空盅推給你：「明天再來。」" : "她把籌碼收進抽屜：「慢走。」"),
-      el("p", { class: "act" }, "木子還是那個木子。她的習慣沒變，除非被你抓到。"),
       // 提示：輸光才給，按了才出現那句話（放在紀錄表這頁，對著表看）
       won ? null : G.hintShown ? el("p", { class: "tell" }, HINT) : el("button", { class: "hint", onclick: () => { G.hintShown = true; render(); } }, "提示"),
       el("div", { class: "stats" },
