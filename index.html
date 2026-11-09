@@ -472,8 +472,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (!top || n <= 0) return;
     const w = top.width * scale; let y = bottomY; const x = cx - w / 2;
     if (n === 1) {  // 單顆：頂面往下疊進底邊一片側片的高度，再把有弧度的底邊蓋上去，不然底下會被切平
-      const yb = bottomY - bot.height * scale;
-      ctx.drawImage(top, x, yb + side.height * scale - top.height * scale, w, top.height * scale);
+      // 2026-11-09 修破圖：頂面圖下半是一片方角的側邊，整張畫上去會從圓弧底邊兩側露出方角 → 只畫頂面那段（切掉一片側片高）
+      const yb = bottomY - bot.height * scale, faceH = top.height - side.height;
+      ctx.drawImage(top, 0, 0, top.width, faceH, x, yb - faceH * scale, w, faceH * scale);
       ctx.drawImage(bot, x, yb, w, bot.height * scale); return;
     }
     y -= bot.height * scale; ctx.drawImage(bot, x, y, w, bot.height * scale);
@@ -908,7 +909,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       // 換層那把（2026-11-09 使用者定）：結算跟換層的心聲放同一張字卡，不另跳彈窗
       if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); showTitleCard([{ c: "result", head, res, cls: G.rclass, step: G.revealStep }, ...c]); }
       // 第三層抓到她（2026-11-09 使用者定）：結算不淡掉，留成一張卡，點一下直接接破關的結局選項卡
-      else if (G.over === "win" && G.winBy === "catch" && !fast()) { const { head, res } = resultText(); showTitleCard([{ c: "result", head, res, cls: G.rclass }], endCard); }
+      // 格式跟前兩張換層卡一樣：右上 3/3、結算寫從她桌上收來的籌碼、下面接心聲（2026-11-09 使用者定）
+      else if (G.over === "win" && G.winBy === "catch" && !fast()) showTitleCard([{ c: "result", head: "抓到了", res: `+${G.him}`, cls: "win", step: "3/3" }, "（這次她來不及收手了。）", "（每次燈閃，她都在喝酒……那罐台啤有問題。）"], endCard);
       else showResultPop();
     };
     G.pendingSettle = settle;
@@ -1321,7 +1323,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const END_HINT = {
     1: ["（她出千的那幾把，好像都有同一個動作……）", "（下次看到那個動作，別再猶豫。）"],
     2: ["（她左手在忙的時候，另一隻手在幹嘛？）"],
-    3: ["（她不再舉起左手跟我聊天了，骰子還是照樣被翻。）", "（她到底是什麼時候動手的？）"],
+    3: ["（她舉手跟我聊天的時候已經不出手了，骰子卻還是照樣被翻。）", "（她到底是什麼時候動手的？）"],
   };
   const ENDINGS = {
     pay: { hold: "expr-nostalgia", pic: "end-pay", lines: [
@@ -1367,7 +1369,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       { c: "act", t: "接下來，你要怎麼做？" }], [
       { label: "讓她賠錢了事", fn: () => ending("pay") },
       { label: "把她的手法公諸於世", fn: () => ending("expose") },
-    ], "end-reveal", false, "3/3");
+    ], "end-reveal");  // 3/3 移到前一張「抓到了」卡（2026-11-09）
     function ending(k) {
       const e = ENDINGS[k]; S.hold = e.hold; G.ending = k;
       // 破關後最後一張卡：只放「從頭開始」（清掉三層進度，回到說明第一頁）（2026-11-09 使用者定）
