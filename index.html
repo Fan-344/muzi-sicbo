@@ -339,12 +339,22 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     const g = ctx.createGain(); g.gain.value = level != null ? level : (kind === "buzz" ? 0.12 : 0.7);
     src.connect(f); f.connect(g); g.connect(ctx.destination); src.start();
   }
+  // 叮（2026-11-09 使用者定）：前兩張換層卡跳出來時響一聲。正弦波疊泛音，快起、慢慢衰減。第二版：使用者說悶，基音 1319 → 2093 Hz、泛音加亮、起音 5 → 2 ms。第三版：使用者要長一點、帶一點減弱，基音衰減 1.1 → 2.4 秒，加一個差 3 Hz 的音讓尾音一波一波變弱
+  function ding(level) {
+    if (SFX.muted || fast()) return; const ctx = audioCtx(); if (!ctx) return;
+    const t = ctx.currentTime + 0.01, out = ctx.createGain(); out.gain.value = level != null ? level : 0.2;  // 2026-11-09 使用者說調小：0.4 → 0.2 out.connect(ctx.destination);
+    [[2093, 1, 2.4], [2096, 0.45, 2.0], [4186, 0.5, 1.1], [5776, 0.28, 0.5], [8372, 0.1, 0.2]].forEach(([f, lv, dec]) => {
+      const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = f;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(lv, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + dec + 0.05);
+    });
+  }
   let lastBuzz = 0;
   // 日光燈：試聽頁第 3 種「只在閃時嗡嗡（斷續）」。平常安靜，燈閃那段才嗡，嗡聲每 12–30 ms 亂跳一次像接觸不良。
   // 用 120 Hz 鋸齒波：手機喇叭放不出 120 Hz 本身，但放得出泛音，聽起來就是嗡。
   function lampSound(seq, now) {
     if (SFX.muted || fast()) return; const ctx = audioCtx(); if (!ctx) return;
-    const b = ctx.currentTime + 0.02, peak = 0.08;
+    const b = ctx.currentTime + 0.02, peak = 0.04;  // 2026-11-09 使用者說日光燈太大聲：0.08 → 0.04
     const out = ctx.createGain(); out.gain.value = 0;
     const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 150;
     const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1500;
@@ -667,14 +677,14 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     ["「你今天怎麼有空？」", "「工地放假喔？」", "「放假還跑來送錢，真孝順。」"],
     ["「剛剛那桌阿伯又胡了。」", "「他說今天手氣很好。」", "「你看起來就沒有。」"],
     ["「這把你押得很快喔。」", "「上次押那麼快的人，」", "「後來把機車也押掉了。」"],
-    ["「你那支錶現在幾點？」", "「慢了五分鐘吧。」", "「跟你的手一樣。」"],
-    ["「我跟你講一個秘密。」", "「靠過來一點。」", "「……騙你的，坐好。」"],
-    ["「你猜我今天贏了幾個？」", "「再加上你這把，」", "「剛好夠吃一碗牛肉麵。」"],
+    ["「你那支錶現在幾點？」", "「好像有點慢了。」", "「跟你的手一樣。」"],
+    ["「我跟你講一個秘密。」", "「靠過來一點。」", "「……你真的靠過來喔？好乖。」"],
+    ["「你猜我今天贏了幾個？」", "「不告訴你。」", "「反正等一下會更多。」"],
     ["「欸，你頭髮剪了喔？」", "「……沒有喔？」", "「那可能是變少了。」"],
     ["「我昨天夢到你。」", "「夢到你贏錢。」", "「醒來我笑了好久。」"],
     ["「你押大還押小？」", "「喔對，你押過了。」", "「我只是想聽你講話。」"],
-    ["「你手上那個水泥，」", "「洗不掉喔？」", "「難怪我的籌碼都灰灰的。」"],
-    ["「隔壁老王說你很會賭。」", "「我跟他說，」", "「他一定是在講反話。」"],
+    ["「巷口那攤肉圓換人做了。」", "「醬變得好甜。」", "「你下次去吃吃看，順便幫我帶一顆。」"],
+    ["「你知道你押的時候會抿嘴嗎？」", "「對，就是現在這樣。」", "「你每次抿嘴，都押錯邊。」"],
   ];
   // 暗示燈閃跟她有關：固定放在第三層的第二把，配喝酒燈閃（2026-11-09 使用者定），不進隨機輪
   const LIGHT_CHAT = ["「這個燈老是閃。」", "「叫老闆娘換，她也不換。」", "「你別一直盯著它，眼睛會花。」"];
@@ -907,7 +917,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       G.pendingSettle = null;
       S.purseHold = null; S.stake = 0; render();
       // 換層那把（2026-11-09 使用者定）：結算跟換層的心聲放同一張字卡，不另跳彈窗
-      if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); showTitleCard([{ c: "result", head, res, cls: G.rclass, step: G.revealStep }, ...c]); }
+      if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); ding(); showTitleCard([{ c: "result", head, res, cls: G.rclass, step: G.revealStep }, ...c]); }
       // 第三層抓到她（2026-11-09 使用者定）：結算不淡掉，留成一張卡，點一下直接接破關的結局選項卡
       // 格式跟前兩張換層卡一樣：右上 3/3、結算寫從她桌上收來的籌碼、下面接心聲（2026-11-09 使用者定）
       else if (G.over === "win" && G.winBy === "catch" && !fast()) showTitleCard([{ c: "result", head: "抓到了", res: `+${G.him}`, cls: "win", step: "3/3" }, "（這次她來不及收手了。）", "（每次燈閃，她都在喝酒……那罐台啤有問題。）"], endCard);
