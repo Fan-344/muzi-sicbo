@@ -907,6 +907,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       S.purseHold = null; S.stake = 0; render();
       // 換層那把（2026-11-09 使用者定）：結算跟換層的心聲放同一張字卡，不另跳彈窗
       if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); showTitleCard([{ c: "result", head, res, cls: G.rclass, step: G.revealStep }, ...c]); }
+      // 第三層抓到她（2026-11-09 使用者定）：結算不淡掉，留成一張卡，點一下直接接破關的結局選項卡
+      else if (G.over === "win" && G.winBy === "catch" && !fast()) { const { head, res } = resultText(); showTitleCard([{ c: "result", head, res, cls: G.rclass }], endCard); }
       else showResultPop();
     };
     G.pendingSettle = settle;
