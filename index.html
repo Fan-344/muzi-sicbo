@@ -169,6 +169,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .label.legend { text-align: center; display: block; border-radius: 6px; padding: 2px 0; }
 .talk .tabs { position: absolute; right: 0; bottom: 100%; display: flex; gap: 6px; align-items: flex-end; }
 .talk .tabs .nexttab { position: static; }
+.titlecard .hintbtn { align-self: center; background: transparent; color: var(--clue); border: 1px dashed var(--clue); border-radius: 999px; padding: 4px 22px; font: 700 .85rem/1.5 var(--body); letter-spacing: .2em; }
+.titlecard .hintbox { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--clue); padding-top: 10px; animation: tcin .4s ease-out; }
+.titlecard .hintbox p { color: var(--clue); }
 /* 2026-11-09 跳過說明從「下一步」旁邊移到最下面一排正中間（有聲、清零重來中間），跟下一步分開免得誤按 */
 .skiptab { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom, 0px)); z-index: 20; font-size: .72rem; color: var(--brass); background: rgba(0,0,0,.55); border: 1px solid var(--brass-dim); border-radius: 999px; padding: 4px 14px; letter-spacing: .05em; }
 .nexttab { position: absolute; right: 0; bottom: 100%; padding: 2px 10px 1px; background: var(--clue); color: var(--felt-lo); border: 0; border-radius: 6px 6px 0 0; font: 700 .72rem/1.5 var(--body); letter-spacing: .05em; }
@@ -259,8 +262,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 第三層：她改成燈閃那一下才伸右手；燈閃時抓到右手才贏。沒出千或太早抓＝抓錯，直接輸這場。
   const KEY = "muzi_b_";  // B 版自己的存檔，不碰 A 版
   let layer = 1;
+  let lostGames = 0;  // 這一層連續輸掉幾場（被趕出去或輸光）；贏了、換層歸零。到 LOSE_HINT_AT 場，離場字卡多一顆「提示」
   try { layer = clamp(+localStorage.getItem(KEY + "layer") || 1, 1, 3); } catch (e) {}
-  function saveLayer() { try { localStorage.setItem(KEY + "layer", String(layer)); } catch (e) {} }
+  function saveLayer() { lostGames = 0; try { localStorage.setItem(KEY + "layer", String(layer)); } catch (e) {} }
   // 總金錢制（2026-11-09 使用者定）：身上的籌碼跨場保留。每場帶籌碼上桌（這就是入場費）；
   // 贏光她桌上的（或第三層當場抓到她）＝把桌上全部收走；被趕出去＝桌上你的全部沒收；輸光桌上的＝這場輸，身上剩的還在
   const WALLET0 = 50, FEE = 0;       // 起始身上 50（起始值，待調）。入場費就是上桌的籌碼（使用者定），不另收：上桌帶 START（8）個
@@ -285,6 +289,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 真破綻跨局保留
   let realTell = "none";  // B 版沒有「習慣動作」，留著變數讓舊程式不用改
   let gamesPlayed = 0;
+  // 隱藏提示（2026-11-09 使用者定）：同一層連續被趕出去或輸光 2 場，離場字卡才出現「提示」，按了才看得到
+  const LOSE_HINT_AT = 2;
   try { gamesPlayed = +localStorage.getItem(KEY + "games") || 0; } catch (e) {}
   function saveTell() { try { localStorage.setItem(KEY + "games", String(gamesPlayed)); } catch (e) {} }
 
@@ -903,6 +909,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (G.over === "win" && !G.winBy) G.winBy = "catch";
     if (G.you <= 0 || G.over) {
       gamesPlayed += 1; saveTell();
+      lostGames = G.over === "win" ? 0 : lostGames + 1;
       if (G.winBy === "clear") RUN.clears += 1; else if (!G.over) RUN.broke += 1;
       // 算錢：贏＝桌上全部收走；被趕出去＝你桌上的全部沒收；輸光＝本來就沒了
       G.payout = G.over === "win" ? G.you + G.him : 0;
@@ -931,6 +938,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
   // 字卡一行：字串＝心聲；act＝旁白；line＝木子說的；you＝你說的（後兩種前面標名字）
   const cardLine = (x) => typeof x === "string" ? el("p", {}, x)
+    : x.c === "hint" ? el("button", { class: "hintbtn", onclick: (e) => { e.stopPropagation(); e.currentTarget.replaceWith(el("div", { class: "hintbox" }, ...x.t.map((t) => el("p", {}, t)))); } }, "提示")
     : x.c === "result" ? el("div", { class: "tcres " + (x.cls || "") }, x.step ? el("i", { class: "tcstep" }, x.step) : null, el("b", {}, x.head), el("span", {}, x.res))
     : x.c === "line" || x.c === "you" ? el("p", { class: x.c }, el("span", { class: "spk" }, x.c === "you" ? "你" : "木子"), x.t)
     : el("p", { class: x.c }, x.t);
@@ -1329,6 +1337,12 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
   // 提示：輸了才給，按了才出現；照你現在走到第幾層
   const HINTS = { 1: "她出千的那幾把，左手一定有動作。", 2: "別只盯著她的左手。", 3: "她換招了。燈閃的那一下，看她的右手。" };
+  // 隱藏提示：比換層卡、結束卡講得直接（玩家自己按的）
+  const LOSE_HINT = {
+    1: ["（她出千的那幾把，好像都是同一招。）"],
+    2: ["（她出千還是那一招：左手舉起來比劃。）"],
+    3: ["（燈閃的時候，看她的右手有沒有伸到骰盅那邊。）"],
+  };
   // 一場結束（2026-11-09 改）：不用結算頁，跳一張主角心聲的字卡，提示接下來這一層怎麼看；點一下直接再賭一局
   const END_HINT = {
     1: ["（她出千的那幾把，好像都有同一個動作……）", "（下次看到那個動作，別再猶豫。）"],
@@ -1362,8 +1376,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       : `桌上的籌碼輸光了。身上還剩 ${wallet} 個。`;
     const broke = G.over !== "win" && wallet < FEE + 1;
     if (G.over !== "win") {
-      if (broke) { showTitleCard([{ c: "act", t: money }, ...END_HINT[layer]], () => showRecord(true), "點一下看紀錄"); return; }
-      showTitleCard([{ c: "act", t: money }, ...END_HINT[layer]], again, "點一下再賭一局"); return;
+      const hint = lostGames >= LOSE_HINT_AT ? [{ c: "hint", t: LOSE_HINT[layer] }] : [];
+      if (broke) { showTitleCard([{ c: "act", t: money }, ...END_HINT[layer], ...hint], () => showRecord(true), "點一下看紀錄"); return; }
+      showTitleCard([{ c: "act", t: money }, ...END_HINT[layer], ...hint], again, "點一下再賭一局"); return;
     }
     if (G.winBy === "clear") {  // 贏光她桌上的：沒抓到她，所以不揭露、不進破關結尾
       showTitleCard([{ c: "act", t: "她桌上的籌碼一個都不剩。她把空盅推給你。" }, { c: "line", t: "「……明天再來。」" }, { c: "act", t: money }], again, "點一下再賭一局"); return;
@@ -1482,7 +1497,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     requestAnimationFrame(loop);
     ["end-reveal", "end-pay", "end-expose", "end-cloth"].forEach((n) => { const i = new Image(); i.src = IMG + n + ".webp"; });  // 結尾圖背景預載
     window.__G = () => G;
-    window.__B = { record: (fail) => showRecord(fail), endCard: () => endCard(), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, zoom: () => zoomLevel(performance.now()), S: () => S };
+    window.__B = { record: (fail) => showRecord(fail), endCard: () => endCard(), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, lost: (n) => { if (n != null) lostGames = n; return lostGames; }, zoom: () => zoomLevel(performance.now()), S: () => S };
     window.__fn = { newRound, placeBet, openCup, grab, swap, swapStop, swapZones, fresh: () => { G = fresh(); }, setX: (x) => { G.swapT0 = performance.now() - x / swapZones().speed * 1000; } };
   }
   boot();
