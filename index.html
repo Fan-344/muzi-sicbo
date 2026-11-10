@@ -106,6 +106,11 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .mv.open { background: var(--brass); color: var(--felt-lo); border-color: var(--brass); } .mv.open small { color: var(--felt-lo); opacity: .75; }
 .moves.two { grid-template-columns: repeat(2, minmax(0,1fr)); } .moves.one { grid-template-columns: 1fr; }
 .mv.grab { border-color: var(--red); } .mv.swap { border-color: var(--clue); }
+/* 抓千按鈕的進度條背景（2026-11-10 使用者定）：押完開始從左往右填，三個動作結束時填滿、按鈕鎖住 */
+.mv.grab { position: relative; overflow: hidden; } .mv.grab b { position: relative; }
+.mv.grab .fill { position: absolute; inset: 0; background: rgba(214, 74, 59, .4); transform-origin: left center; transform: scaleX(0); pointer-events: none; }
+.mv.grab .fill.run { animation: grabfill linear forwards; } .mv.grab .fill.full { transform: scaleX(1); }
+@keyframes grabfill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .mv:disabled { opacity: .35; cursor: default; }
 /* 每把結束的彈出視窗 */
 .pop { position: fixed; left: 50%; top: 50%; z-index: 30; transform: translate(-50%, -50%); min-width: 200px; text-align: center; background: rgba(6, 22, 16, .94); border: 2px solid var(--brass); border-radius: 16px; padding: 16px 28px; box-shadow: 0 10px 40px rgba(0,0,0,.6); pointer-events: none; display: flex; flex-direction: column; gap: 4px; animation: popio 2s ease-out forwards; }
@@ -860,7 +865,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       if (G.cheated) rest.splice(Math.floor(Math.random() * 2), 0, "cheat");
       planned = ["drink", ...rest];
     }
-    G.actsDone = false; G.countdown = 0;
+    G.actsDone = false; G.countdown = 0; G.bar = null;
     S.flick = [];
     G.shownTells = [];  // 只記真的播出來的
     G.lines = [{ c: "line", t: `你押${sideName[side]}，${G.amt} 個。` }];
@@ -889,11 +894,15 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
   async function runTells(planned, seq, honest) {
     const alive = () => G.phase === "open" && G.tellSeq === seq;
-    const firstAt = 700 + Math.random() * 1500;  // 第一個動作：出千、沒出千都一樣
+    // 動作之間的空檔先抽好（第一個動作前 0.7–2.2 秒，出千、沒出千都一樣；之後每個 0.5–1.2 秒），才算得出這一把三個動作總共多長
+    const gaps = planned.map((_, k) => k === 0 ? 700 + Math.random() * 1500 : 500 + Math.random() * 700);
+    // 抓千按鈕的進度條（2026-11-10 使用者定）：照時間等速填，三個動作結束剛好填滿。render 會重畫按鈕，所以記開始時間和總長，重畫時接著跑
+    const actMs = (t) => (layer === 1 && ZOOM_RECT[t === "cheat" ? "chat" : t] ? 400 : 0) + (t === "cheat" && layer === 2 ? L2_REACH * 2 + L2_HOLD : 300 + hold());  // 第一層鏡頭會推近的動作前多 0.4 秒（往後靠不推近）
+    if (!fast()) { G.bar = { t0: performance.now(), dur: gaps.reduce((a, b) => a + b, 0) + planned.reduce((a, t) => a + actMs(t), 0) }; render(); }
 
     for (let k = 0; k < planned.length; k++) {
       const t = planned[k];
-      await waitExact(k === 0 ? firstAt : 500 + Math.random() * 700);
+      await waitExact(gaps[k]);
       if (!alive()) return;
       if (t === "cheat") {
         // 右手伸過去（a）→ 側面扶盅（b，抓千要按在這一格）→ 收回（a）。第三層整段燈都在閃
@@ -1341,7 +1350,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
         el("button", { onclick: () => placeBet("big") }, el("b", {}, "大"), el("small", {}, "11–17"))));
     } else if (G.phase === "open") {
       p.append(el("div", { class: "moves one" },  // B 版拿掉「自己出千」；2026-11-09 再拿掉「直接開」：動作時只能抓千，演完她直接開
-        el("button", { class: "mv grab", onclick: grab, disabled: !!G.actsDone }, el("b", {}, "抓對手出千"))));
+        el("button", { class: "mv grab", onclick: grab, disabled: !!G.actsDone },
+          el("i", { class: "fill" + (G.actsDone ? " full" : G.bar ? " run" : ""), style: G.bar && !G.actsDone ? `animation-duration:${Math.round(G.bar.dur)}ms;animation-delay:${-Math.round(performance.now() - G.bar.t0)}ms` : null }),
+          el("b", {}, "抓對手出千"))));
     } else if (G.phase === "swap" || G.phase === "swapfreeze") {
       p.append(el("p", { class: "wait" }, "……"));  // 被換骰框蓋住
     } else if (G.phase === "reveal") {
