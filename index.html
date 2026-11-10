@@ -234,7 +234,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 2026-11-09 第三版：第一、二層出千用舉手比劃，而且只有出千才舉手（只有真比劃）；第三層出千用喝酒＋燈閃，
   // 沒出千時也會喝酒、比劃（假動作）。TELLS 是前兩層（和說明、催促）會出現的普通動作
   const TELLS = ["cup", "hair", "lean", "call", "neck"];  // neck 玩項鍊（2026-11-09 新增，不舉手：左手到胸口勾金鍊子）  // call 招手（2026-11-09 新增假動作：舉左手跟別桌打招呼、看向旁邊；跟出千的比劃不同）
-  const L3_FAKES = ["cup", "hair", "lean", "chat", "drink"];
+  const L3_POOL = ["hair", "lean", "chat", "drink", "call", "neck"];  // 第三層的假動作：沒有一個會碰骰盅
   const TELL_NAME = { cheat: "比劃", call: "招手", neck: "玩項鍊", cup: "手搭盅", drink: "喝啤酒", hair: "撥頭髮", chat: "聊天", lean: "往後靠" };
   // 紀錄表縮圖：從 b 格裁的區域（656 座標）
   const TELL_CROP = { cheat: [300, 60, 320, 320], call: [330, 40, 320, 320], neck: [260, 180, 320, 320], cup: [80, 400, 300, 256], drink: [300, 60, 320, 320], hair: [330, 40, 300, 300], chat: [330, 40, 300, 320], lean: [150, 120, 360, 360] };
@@ -244,6 +244,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     "cheat-a", "cheat-b", "cheatw-a", "cheatw-b", "shake-a", "shake-b", "cup-open", "hand-grab", "hand-grab-caught", "hand-grab-shamed", "hand-swap", "hand-swap-caught"];
   const PROPS = ["die-1", "die-2", "die-3", "die-4", "die-5", "die-6", "chip-top-black", "chip-side-black", "chip-bottom-black", "chip-top-red", "chip-side-red", "chip-bottom-red"];
   const W = 656, H = 656, LAMP = [121, 37, 534, 51];
+  const ROOM_DARK = 0.34;            // 燈暗的那一段，整個畫面先暗這麼多（燈沒力了，全場都暗）。待調
+  const BODY_SHADE = 0.9;            // 她身體落在桌面上的影子多濃（0–1）。待調
+  const TABLE_TOP = [526, 550];      // 影子只落在桌面：y=526（骰盅頂）開始，到 y=550（桌緣）全濃。桌緣以上不加暗（使用者：往上的過渡很刻意）
 
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const rnd = () => 1 + Math.floor(Math.random() * 6);
@@ -449,6 +452,45 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     let lv = 0; for (const [a, b, k] of S.flick) if (now >= a && now < b) lv = Math.max(lv, k);
     return lv;
   }
+  // 她身體落在桌面上的影子：燈在她頭頂後方，影子往前倒在桌上。形狀固定（不跟姿勢變，不然影子自己就洩漏她的手在哪）：
+  // 外圈淡的半影蓋到兩邊手平常放的位置，中間濃的本影蓋住骰盅那一帶；桌子兩端留著比較亮。只畫一次，存起來重複用
+  let shadeCv = null;
+  function bodyShade() {
+    if (shadeCv) return shadeCv;
+    const K = 4, n = W / K;  // 用 1/4 大小算，再放大回去
+    const t = document.createElement("canvas"); t.width = t.height = n; const tx = t.getContext("2d");
+    // 一塊邊緣糊掉的影子：小圖上畫實心形狀，自己做三次方框模糊（近似高斯）。
+    // 不靠 shadowBlur／ctx.filter：前者形狀畫在畫面外時 Safari 可能整個不畫，後者 iOS 不一定有，自己算每台手機結果才一樣
+    const soft = (pts, r, a) => {
+      tx.clearRect(0, 0, n, n); tx.beginPath(); pts.forEach(([px, py], i) => i ? tx.lineTo(px / K, py / K) : tx.moveTo(px / K, py / K)); tx.closePath(); tx.fill();
+      const d = tx.getImageData(0, 0, n, n).data, f = new Float32Array(n * n), g = new Float32Array(n * n);
+      for (let i = 0; i < n * n; i++) f[i] = d[i * 4 + 3] / 255 * a;
+      const pass = (src, dst, dx, dy) => {
+        for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+          let sum = 0;
+          for (let k = -r; k <= r; k++) sum += src[Math.min(n - 1, Math.max(0, y + k * dy)) * n + Math.min(n - 1, Math.max(0, x + k * dx))];  // 超出邊界就取邊上的值，影子當作一路延伸出畫面
+          dst[y * n + x] = sum / (2 * r + 1);
+        }
+      };
+      for (let i = 0; i < 3; i++) { pass(f, g, 1, 0); pass(g, f, 0, 1); }
+      return f;
+    };
+    const pen = soft([[40, 500], [620, 500], [720, 760], [-60, 760]], 7, 0.5);    // 半影：肩膀到手肘的寬度
+    const umb = soft([[185, 500], [455, 500], [520, 760], [120, 760]], 6, 0.6);   // 本影：軀幹正前方，骰盅在這裡面
+    const img = tx.createImageData(n, n);
+    for (let y = 0; y < n; y++) {
+      // 桌上的影子只留桌面上的部分：桌緣以上淡出，不然會爬到她身上和後面的牆板
+      const m = Math.min(1, Math.max(0, (y * K + K / 2 - TABLE_TOP[0]) / (TABLE_TOP[1] - TABLE_TOP[0])));
+      for (let x = 0; x < n; x++) {
+        const i = y * n + x;
+        img.data[i * 4 + 3] = Math.round((1 - (1 - pen[i]) * (1 - umb[i])) * m * 255);
+      }
+    }
+    tx.putImageData(img, 0, 0);
+    const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(t, 0, 0, W, H);
+    return (shadeCv = c);
+  }
   let sceneCv, sceneCtx;
   function zoomLevel(now) { const z = S.zoom; if (!z) return 0; const k = clamp((now - z.t0) / z.dur, 0, 1); const e = k * k * (3 - 2 * k); return z.from + (z.to - z.from) * e; }
   function setZoom(to, instant, rect, dur) { const now = performance.now(); const old = S.zoom; S.zoom = { from: instant ? to : zoomLevel(now), to, t0: now, dur: dur || 700, rect: rect || (old && old.rect) || [0, 0, W, H] }; }
@@ -469,17 +511,24 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     // 燈閃在 B 版是線索，不能因為「減少動態效果」就關掉：那時改成整段穩定變暗，不一閃一閃
     let lv = flickerLevel(now);
     if (reduced() && S.flick.length && now >= S.flick[0][0] && now < S.flick[S.flick.length - 1][1]) lv = 0.55;
+    if (S.stake > 0) {  // 桌上押的那疊：先畫一塊貼桌的影子，不然會飄。畫在變暗之前，燈暗時籌碼跟著暗
+      const sx = W / 2 + 6, sy = H - 26;
+      ctx.save(); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.ellipse(sx + 2, sy - 3, 34, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      drawStack(ctx, "red", S.stake, sx, sy, 0.95);
+    }
+    // 燈暗的那一段（2026-11-10 使用者定）：她的手只在這時候伸到骰盅，要讓人不容易看清楚。
+    // 第一版是一條從手肘高度往下漸暗的橫帶，使用者說不自然、往上的過渡刻意 → 改成：整個畫面先暗一階，再把她身體的影子疊在桌面上（桌緣以上不另外加暗）。
+    // 這一整段都暗著（閃的空檔也不亮回來）；燈管和上半身照舊一閃一閃
+    if (S.flick.length && now >= S.flick[0][0] && now < S.flick[S.flick.length - 1][1]) {
+      ctx.fillStyle = `rgba(0,0,0,${ROOM_DARK})`; ctx.fillRect(0, 0, W, H);
+      ctx.save(); ctx.globalAlpha = BODY_SHADE; ctx.drawImage(bodyShade(), 0, 0); ctx.restore();
+    }
     if (lv > 0) {
       const cx = (LAMP[0] + LAMP[2]) / 2, cy = (LAMP[1] + LAMP[3]) / 2;
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 1.15);
       g.addColorStop(0, `rgba(0,0,0,${(lv * 0.5).toFixed(3)})`); g.addColorStop(1, `rgba(0,0,0,${(lv * 0.5 * 0.35).toFixed(3)})`);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = `rgba(30,45,38,${(lv * 0.7).toFixed(3)})`; ctx.fillRect(LAMP[0], LAMP[1], LAMP[2] - LAMP[0], LAMP[3] - LAMP[1]);
-    }
-    if (S.stake > 0) {  // 桌上押的那疊：先畫一塊貼桌的影子，不然會飄
-      const sx = W / 2 + 6, sy = H - 26;
-      ctx.save(); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.ellipse(sx + 2, sy - 3, 34, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      drawStack(ctx, "red", S.stake, sx, sy, 0.95);
     }
   }
   // 籌碼堆：底片＋側片×(n−2)＋頂面，圖片原寬 59
@@ -530,19 +579,21 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     { scene: "cheat", c: "act", t: "木子的爸爸教過她一招：在你快要贏的那一把，偷偷把一顆骰子翻面，讓你變成輸。" },
     { scene: "cheatReveal", c: "act", t: "但你從小在麻將館長大，別人出千瞞不過你的眼睛。開盅時，被她翻過的那顆你一定認得出來，會標上「被出千」。" },
     { scene: "mismatch", c: "act", t: "你偷看到的那顆，開出來要是變了，也是她動的手。只是等到開盅才發現，那一把已經輸了。" },
-    { scene: "tell", c: "act", t: "她動手翻骰子的時候，身上一定會有動作。你要看出來的，是她到底在哪一下動手。" },
+    // 2026-11-10 使用者定：試玩的人分不出要看「同一個動作的細微變化」還是「某一個固定動作」→ 這頁改成主角心聲，講題型不講答案
+    { scene: "tell", c: "mind", t: ["（她的小動作我從小看到大，就那幾個，每次都一樣。）", "（其中有一個，她只有動手的時候才會做。）"] },
     { scene: "watch", c: "act", t: "押完之後，她會做三個動作，順序每次都不一樣，這段時間畫面外框會一閃一閃。三個動作做完就來不及抓了，她會直接開盅。" },
     { scene: "grab", c: "act", t: "看準她動手的那一下，按『抓對手出千』，當場按住她的手。她還沒動就抓、或是她根本沒動，都算你抓錯；她已經收手了才抓，就是慢了一步。" },
     { scene: "grab", t: "「想抓我？抓到了，今天算你贏；抓錯了，你桌上的錢全部留下，人給我出去。」" },
     { scene: "start", t: "「好了，來吧。」" },
   ];
   const introLine = (x) => typeof x === "string" ? { c: "line", t: x } : { c: x.c || "line", t: x.t };
+  const introLines = (x) => Array.isArray(x.t) ? x.t.map((t) => ({ c: x.c || "line", t })) : [introLine(x)];  // 一頁可以放好幾句（t 給陣列）
   // 第二次以後：她每 6–9 秒做一個動作、配一句催促或嗆人的話，直到你坐下
   const INTRO_AGAIN = ["「又來了喔。坐。」"];
   const NAG = [["lean", "「怕了？」"], ["chat", "「坐啊，我不咬人。」"], ["hair", "「我沒時間等你想。」"], ["cup", "「要賭就快。」"], ["lean", "「你爸不會這樣磨蹭。」"]];
   async function introNag(seq) {
     const alive = () => G.phase === "intro" && G.tellSeq === seq;
-    const order = NAG.filter(([t]) => layer === 3 || TELLS.includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 前兩層開場也不舉手
+    const order = NAG.filter(([t]) => layer === 3 ? t !== "cup" : TELLS.includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 前兩層開場也不舉手
     while (alive()) {
       await wait(6000 + Math.random() * 3000);
       if (!alive()) return;
@@ -571,7 +622,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     cheatReveal: ["你的眼睛", "被翻過的那顆，你一定認得出來"],
     mismatch: ["對不上", "偷看到 5，開出來是 3：她動了手"],
     cheat: ["她的手法", "在你快贏的那把，偷翻一顆"],
-    tell: ["破綻", "她動手時，身上一定有動作"],
+    tell: ["破綻", "有一個動作，她動手時才會做"],
     watch: ["三個動作", "做完就不能抓，她直接開盅"],
   };
   const TELL_SCENES = new Set(["table", "dice", "triple", "bet", "purse", "peek", "peek2", "mismatch", "start"]);  // 這些頁照舊一句配一個動作
@@ -620,7 +671,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       const tick = () => { if (!tutAlive(tok)) return; const m = document.getElementById("demomarker"); if (m) { const x = ((performance.now() - t0) / 1000 * D.zones.speed) % 2; m.style.left = `${(x <= 1 ? x : 2 - x) * 100}%`; } requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     }
-    G.lines = [introLine(step)];
+    G.lines = introLines(step);
     render();
     if (TELL_SCENES.has(sc)) setTimeout(() => { if (tutAlive(tok)) introTell(); }, i === 0 ? 600 : 0);
   }
@@ -761,7 +812,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const BET_NAG = [["lean", "「怕了？」"], ["hair", "「我沒時間等你想。」"], ["cup", "「要賭就快。」"], ["lean", "「大還小，想那麼久？」"], ["cup", "「押啊，盅都放好了。」"], ["chat", "「快點啦，我還要顧別桌。」"]];
   async function betNag(round, g0) {
     const alive = () => G === g0 && G.round === round && G.phase === "bet";
-    const order = BET_NAG.filter(([t]) => layer === 3 || TELLS.includes(t)).sort(() => Math.random() - 0.5); let i = 0;
+    const order = BET_NAG.filter(([t]) => layer === 3 ? t !== "cup" : TELLS.includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 第三層催你押的時候也不搭盅
     while (alive() && !fast()) {
       await wait(6000 + Math.random() * 3000);
       if (!alive()) return;
@@ -784,10 +835,12 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     }
     // B 版：出千那把，第一個動作就是「左手比劃、右手翻骰」；沒出千的把放這一層的假動作，時間一樣
     // 每把固定三個動作，順序隨機；出千那把，出千隨機排在三格裡的其中一格，另外兩格是假動作（2026-11-09 使用者定）
-    const pool = layer < 3 ? TELLS : ["hair", "lean", "chat", "drink", "drinkhand", "cup", "call", "neck"];
+    // 第三層（2026-11-10 使用者定）：她的手只在燈暗的時候碰骰盅，其他時候都不碰 → 假動作拿掉「手搭盅」和「喝酒扶盅但燈不閃」。
+    // 燈暗有兩種：出千（右手伸到骰盅）和喝酒假動作（右手不動），要在暗的桌面上看出右手有沒有動
+    const pool = layer < 3 ? TELLS : L3_POOL;
     // 三個動作不重複（2026-11-09 使用者定）。喝酒類假動作（喝酒、喝酒扶盅）算同一種，一把最多一個；
     // 出千自成一種：第三層出千那把也可能出現喝酒類假動作（2026-11-09 使用者定）
-    const kindOf = (t) => t === "drink" || t === "drinkhand" ? "beer" : t === "cheat" ? "cheat" : t;
+    const kindOf = (t) => t === "drink" ? "beer" : t;
     const used = new Set(G.cheated ? [kindOf("cheat")] : []);
     const fakes = []; const first = fakeFirst();
     if (!used.has(kindOf(first))) { fakes.push(first); used.add(kindOf(first)); }
@@ -822,7 +875,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   function fakeFirst() {
     if (layer === 1) return Math.random() < 0.6 ? "hair" : pick(TELLS);  // 左手的假動作：撥頭髮（前兩層不舉手：舉手只給出千）
     if (layer === 2) return Math.random() < 0.5 ? "cup" : pick(TELLS);
-    return pick(["hair", "lean", "chat", "drink", "drinkhand", "call", "neck"]);  // 第三層：沒出千也會喝酒、比劃，或喝酒＋右手扶盅但燈不閃（drinkhand）
+    return pick(L3_POOL);  // 第三層：沒出千也會喝酒（燈暗、右手不動）、比劃
   }
   // 第一層：鏡頭先推到做動作的那隻手（0.4 秒），動作播完拉回全景（0.5 秒）。每個動作都這樣，推近本身不洩漏她有沒有出千
   async function act(key, steps, alive) {
@@ -855,10 +908,6 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       } else {
         if (t === "drink" && layer === 3 && !fast()) longFlick(150 + hold() + 250);  // 第三層：沒出千時喝酒，燈也會閃（右手不動）
         G.shownTells.push(t);
-        if (t === "drinkhand") {  // 假動作（2026-11-09 使用者定）：喝酒、右手扶盅，但沒按按鈕、燈不閃。跟出千同一組圖，抓了算抓錯
-          await act("cheat", [["tell-drink-a", 75], ["cheat-a", 75], ["cheat-b", hold(), sayNext], ["cheat-a", 75], ["tell-drink-a", 75]], alive);
-          if (!alive()) return; continue;
-        }
         await act(t, [[`tell-${t}-a`, 150], [`tell-${t}-b`, hold(), sayNext], [`tell-${t}-a`, 150]], alive);
       }
       if (!alive()) return;
@@ -1215,7 +1264,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       ? el("div", { class: "tabs" },
           el("button", { class: "skiptab", onclick: (e) => { e.stopPropagation(); RUN.skipped = true; saveRun(); stopTells(); G.demo = null; newRound(); } }, "跳過說明"),
           el("button", { class: "nexttab", onclick: (e) => { e.stopPropagation(); nextIntro(); } }, `${G.introIdx + 1} / ${INTRO.length}　下一步 ▶`)) : null;
-    const who = G.phase === "intro" && G.lines[0] && G.lines[0].c === "act" ? "旁白" : "木子";
+    const c0 = G.phase === "intro" && G.lines[0] ? G.lines[0].c : "";
+    const who = c0 === "act" ? "旁白" : c0 === "mind" ? "你" : "木子";  // 說明頁：灰字是旁白、心聲是你，其他是木子說的
     return el("div", { class: "talk" }, el("span", { class: "who" }, who), tab, lines);  // 固定高度，新句子從底下疊上來，舊的被推出去
   }
 
@@ -1497,7 +1547,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     requestAnimationFrame(loop);
     ["end-reveal", "end-pay", "end-expose", "end-cloth"].forEach((n) => { const i = new Image(); i.src = IMG + n + ".webp"; });  // 結尾圖背景預載
     window.__G = () => G;
-    window.__B = { record: (fail) => showRecord(fail), endCard: () => endCard(), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, lost: (n) => { if (n != null) lostGames = n; return lostGames; }, zoom: () => zoomLevel(performance.now()), S: () => S };
+    window.__B = { record: (fail) => showRecord(fail), endCard: () => endCard(), run: () => RUN, wallet: (n) => { if (n != null) { wallet = n; saveWallet(); } return wallet; }, layer: () => layer, setLayer: (n) => { layer = n; saveLayer(); }, lost: (n) => { if (n != null) lostGames = n; return lostGames; }, intro: (i) => { startIntro(true); if (i) { G.introIdx = i; enterStep(i); } }, zoom: () => zoomLevel(performance.now()), S: () => S };
     window.__fn = { newRound, placeBet, openCup, grab, swap, swapStop, swapZones, fresh: () => { G = fresh(); }, setX: (x) => { G.swapT0 = performance.now() - x / swapZones().speed * 1000; } };
   }
   boot();
