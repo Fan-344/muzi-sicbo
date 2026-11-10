@@ -234,6 +234,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 2026-11-09 第三版：第一、二層出千用舉手比劃，而且只有出千才舉手（只有真比劃）；第三層出千用喝酒＋燈閃，
   // 沒出千時也會喝酒、比劃（假動作）。TELLS 是前兩層（和說明、催促）會出現的普通動作
   const TELLS = ["cup", "hair", "lean", "call", "neck"];  // neck 玩項鍊（2026-11-09 新增，不舉手：左手到胸口勾金鍊子）  // call 招手（2026-11-09 新增假動作：舉左手跟別桌打招呼、看向旁邊；跟出千的比劃不同）
+  const L12_POOL = [...TELLS, "drink"];  // 前兩層的假動作：多一個喝酒（燈淺閃、右手不動；2026-11-10 使用者定）
   const L3_POOL = ["hair", "lean", "chat", "drink", "call", "neck"];  // 第三層的假動作：沒有一個會碰骰盅
   const TELL_NAME = { cheat: "比劃", call: "招手", neck: "玩項鍊", cup: "手搭盅", drink: "喝啤酒", hair: "撥頭髮", chat: "聊天", lean: "往後靠" };
   // 紀錄表縮圖：從 b 格裁的區域（656 座標）
@@ -245,6 +246,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const PROPS = ["die-1", "die-2", "die-3", "die-4", "die-5", "die-6", "chip-top-black", "chip-side-black", "chip-bottom-black", "chip-top-red", "chip-side-red", "chip-bottom-red"];
   const W = 656, H = 656, LAMP = [121, 37, 534, 51];
   const ROOM_DARK = 0.34;            // 燈暗的那一段，整個畫面先暗這麼多（燈沒力了，全場都暗）。待調
+  const FLICK_DEPTH = { 1: 0.35, 2: 0.65, 3: 1 };  // 每一層燈暗的程度（第三層 = 1）：前兩層淺閃，一層比一層暗（2026-11-10 使用者定）。待調
   const BODY_SHADE = 0.9;            // 她身體落在桌面上的影子多濃（0–1）。待調
   const TABLE_TOP = [526, 550];      // 影子只落在桌面：y=526（骰盅頂）開始，到 y=550（桌緣）全濃。桌緣以上不加暗（使用者：往上的過渡很刻意）
 
@@ -429,15 +431,16 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
   // 她沒出千的那把：押完到第一個動作之間，燈一定閃一次（時間點、閃法都隨機）
   const FLICK_MAX = { double: 480, sag: 450, burst: 1100 };  // 沒出千時的閃法與最長多久（ms）。輕閃太短看不出來，不用
-  // 第三層：燈暗一段（閃爍不斷），她在這段時間伸右手；沒出千的把也會這樣閃（假動作）
-  function longFlick(dur) {
-    const now = performance.now(); let t = now; const seq = [];
-    while (t < now + dur) { const d = 60 + Math.random() * 90; seq.push([t, t + d, 0.45 + Math.random() * 0.25]); t += d; if (Math.random() < 0.25) t += 30 + Math.random() * 40; }
+  // 燈暗一段（閃爍不斷）。三層都跟著她喝酒出現，深淺照 FLICK_DEPTH：前兩層淺閃、她只是喝酒；
+  // 第三層最暗，她在這段時間伸右手，沒出千的把也會這樣閃（假動作）
+  function longFlick(dur, delay = 0) {
+    const now = performance.now(), t0 = now + delay, dk = FLICK_DEPTH[layer] || 1; let t = t0; const seq = [];
+    while (t < t0 + dur) { const d = 60 + Math.random() * 90; seq.push([t, t + d, (0.45 + Math.random() * 0.25) * dk]); t += d; if (Math.random() < 0.25) t += 30 + Math.random() * 40; }
     S.flick = seq; lampSound(seq, now);
   }
   function honestFlick(kind) { const now = performance.now(); const { seq } = makeFlick(kind, now); S.flick = seq; lampSound(seq, now); }
   function flickerLevel(now) {
-    if (now >= S.nextFlick) S.nextFlick = now + 1500;  // B 版沒有隨機燈閃（2026-11-09 使用者定）：前兩層燈完全不閃；第三層只有她的手碰到啤酒才閃（longFlick）
+    if (now >= S.nextFlick) S.nextFlick = now + 1500;  // B 版沒有隨機燈閃（2026-11-09 使用者定）：三層都只有她喝酒的時候才閃（longFlick）。2026-11-10 改：前兩層原本完全不閃，現在喝酒時淺閃
     if (now >= S.nextFlick) {
       const kind = pick(["micro", "micro", "micro", "micro", "double", "double", "sag", "sag", "burst"]);
       let t = now; const seq = [];
@@ -510,7 +513,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     ctx.drawImage(f, 0, 0, W, H);
     // 燈閃在 B 版是線索，不能因為「減少動態效果」就關掉：那時改成整段穩定變暗，不一閃一閃
     let lv = flickerLevel(now);
-    if (reduced() && S.flick.length && now >= S.flick[0][0] && now < S.flick[S.flick.length - 1][1]) lv = 0.55;
+    const dk = FLICK_DEPTH[layer] || 1;
+    if (reduced() && S.flick.length && now >= S.flick[0][0] && now < S.flick[S.flick.length - 1][1]) lv = 0.55 * dk;
     if (S.stake > 0) {  // 桌上押的那疊：先畫一塊貼桌的影子，不然會飄。畫在變暗之前，燈暗時籌碼跟著暗
       const sx = W / 2 + 6, sy = H - 26;
       ctx.save(); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.ellipse(sx + 2, sy - 3, 34, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -518,10 +522,10 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     }
     // 燈暗的那一段（2026-11-10 使用者定）：她的手只在這時候伸到骰盅，要讓人不容易看清楚。
     // 第一版是一條從手肘高度往下漸暗的橫帶，使用者說不自然、往上的過渡刻意 → 改成：整個畫面先暗一階，再把她身體的影子疊在桌面上（桌緣以上不另外加暗）。
-    // 這一整段都暗著（閃的空檔也不亮回來）；燈管和上半身照舊一閃一閃
+    // 這一整段都暗著（閃的空檔也不亮回來）；燈管和上半身照舊一閃一閃。前兩層同一套、比較淺（FLICK_DEPTH）
     if (S.flick.length && now >= S.flick[0][0] && now < S.flick[S.flick.length - 1][1]) {
-      ctx.fillStyle = `rgba(0,0,0,${ROOM_DARK})`; ctx.fillRect(0, 0, W, H);
-      ctx.save(); ctx.globalAlpha = BODY_SHADE; ctx.drawImage(bodyShade(), 0, 0); ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${ROOM_DARK * dk})`; ctx.fillRect(0, 0, W, H);
+      ctx.save(); ctx.globalAlpha = BODY_SHADE * dk; ctx.drawImage(bodyShade(), 0, 0); ctx.restore();
     }
     if (lv > 0) {
       const cx = (LAMP[0] + LAMP[2]) / 2, cy = (LAMP[1] + LAMP[3]) / 2;
@@ -837,7 +841,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     // 每把固定三個動作，順序隨機；出千那把，出千隨機排在三格裡的其中一格，另外兩格是假動作（2026-11-09 使用者定）
     // 第三層（2026-11-10 使用者定）：她的手只在燈暗的時候碰骰盅，其他時候都不碰 → 假動作拿掉「手搭盅」和「喝酒扶盅但燈不閃」。
     // 燈暗有兩種：出千（右手伸到骰盅）和喝酒假動作（右手不動），要在暗的桌面上看出右手有沒有動
-    const pool = layer < 3 ? TELLS : L3_POOL;
+    const pool = layer < 3 ? L12_POOL : L3_POOL;
     // 三個動作不重複（2026-11-09 使用者定）。喝酒類假動作（喝酒、喝酒扶盅）算同一種，一把最多一個；
     // 出千自成一種：第三層出千那把也可能出現喝酒類假動作（2026-11-09 使用者定）
     const kindOf = (t) => t === "drink" ? "beer" : t;
@@ -871,7 +875,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     const run = runTells(planned, G.tellSeq, !G.cheated);
     if (fast()) await run;
   }
-  // 假動作：第一層左手撥頭髮、比劃；第二層右手搭盅；第三層燈閃時不動右手（不放手搭盅，免得跟真的混）
+  // 假動作：第一層左手撥頭髮；第二層右手搭盅；第三層燈閃時不動右手（不放手搭盅，免得跟真的混）。喝酒（燈閃、右手不動）三層都會出現
   function fakeFirst() {
     if (layer === 1) return Math.random() < 0.6 ? "hair" : pick(TELLS);  // 左手的假動作：撥頭髮（前兩層不舉手：舉手只給出千）
     if (layer === 2) return Math.random() < 0.5 ? "cup" : pick(TELLS);
@@ -906,7 +910,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
           await act("cheat", [["tell-drink-a", 75], ["cheat-a", 75, () => { G.cheatState = "reach"; }], ["cheat-b", hold(), () => { G.cheatState = "on"; sayNext(); }], ["cheat-a", 75, () => { G.cheatState = "done"; }], ["tell-drink-a", 75]], alive);
         G.cheatState = "done";
       } else {
-        if (t === "drink" && layer === 3 && !fast()) longFlick(150 + hold() + 250);  // 第三層：沒出千時喝酒，燈也會閃（右手不動）
+        if (t === "drink" && !fast()) longFlick(150 + hold() + 250, layer === 1 ? 400 : 0);  // 喝酒假動作：燈會閃、右手不動。前兩層淺閃（她從頭就在鋪「這燈老是閃」），第三層跟出千一樣暗。第一層鏡頭要先推近 0.4 秒，燈等她拿起台啤才閃
         G.shownTells.push(t);
         await act(t, [[`tell-${t}-a`, 150], [`tell-${t}-b`, hold(), sayNext], [`tell-${t}-a`, 150]], alive);
       }
