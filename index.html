@@ -249,6 +249,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const PROPS = ["die-1", "die-2", "die-3", "die-4", "die-5", "die-6", "chip-top-black", "chip-side-black", "chip-bottom-black", "chip-top-red", "chip-side-red", "chip-bottom-red"];
   const W = 656, H = 656, LAMP = [121, 37, 534, 51];
   const ROOM_DARK = 0.34;            // 燈暗的那一段，整個畫面先暗這麼多（燈沒力了，全場都暗）。待調
+  const FLICK_SOFT = 0.35;  // 第二層沒喝酒的動作（撥頭髮、招手、舉手比劃出千……）也淺閃（2026-11-10 使用者定，只有第二層）：每個動作燈都在閃，喝酒那次比較暗（中閃）。跟第一層喝酒一樣淺
   const FLICK_DEPTH = { 1: 0.35, 2: 0.65, 3: 1 };  // 每一層燈暗的程度（第三層 = 1）：前兩層淺閃，一層比一層暗（2026-11-10 使用者定）。待調
   const BODY_SHADE = 0.9;            // 她身體落在桌面上的影子多濃（0–1）。待調
   const TABLE_TOP = [526, 550];      // 影子只落在桌面：y=526（骰盅頂）開始，到 y=550（桌緣）全濃。桌緣以上不加暗（使用者：往上的過渡很刻意）
@@ -259,6 +260,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const reduced = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const fast = () => !!window.__fast;
   const wait = (ms) => fast() ? Promise.resolve() : new Promise((r) => setTimeout(r, reduced() ? Math.min(ms, 150) : ms));
+  // 押完之後那三個動作的時間是玩法（抓千要按在扶盅那一格），不能被「減少動態效果」壓短：原本每一格最多 0.15 秒，成功區間只剩 0.15 秒（2026-11-10 使用者定）
+  const waitExact = (ms) => fast() ? Promise.resolve() : new Promise((r) => setTimeout(r, ms));
   const sum = (d) => d[0] + d[1] + d[2];
   const isTriple = (d) => d[0] === d[1] && d[1] === d[2];
   const sideOf = (d) => isTriple(d) ? "triple" : sum(d) >= 11 ? "big" : "small";
@@ -290,6 +293,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 2026-11-09 第二版：原本框 280（放大約 2.3 倍）太暈，改成 420（約 1.5 倍）；出千的框下緣到 y 460，扶盅的右手在框外
   // 2026-11-09 第三版：只在她動左手時推近（喝啤酒、撥頭髮、比劃、出千）；往後靠（兩手抱胸）、手搭盅（右手）不推近
   const ZOOM_RECT = { drink: [200, 20, 420, 420], hair: [210, 0, 420, 420], chat: [236, 40, 420, 420], call: [236, 20, 420, 420], neck: [200, 160, 420, 420], cheat: [200, 20, 420, 420] };  // 出千（喝酒）用喝酒的框，下緣 y 440，扶盅的右手在框外
+  // 第二層拼手速（2026-11-10 使用者定）：扶盅那一格只停 0.8 秒；伸過去、收回各 0.4 秒（原本各 0.15 秒）。伸過去那段按照舊算太早、收回之後算慢了，都趕出去。
+  // 看到手動才按的人大約 0.4–0.6 秒按下，剛好落在扶盅那一格。第一層不變（整段抓都算半抓，時間不影響判定）
+  const L2_REACH = 400, L2_HOLD = 800;
   const CHEAT_HOLD = HOLD;            // 右手扶盅那一格停多久：抓千要在這一格按。跟其他動作一樣長（2026-11-09：700 → 1200）
   // 第三層可抓的時間拉長（2026-11-09 使用者定）：第三層所有動作（出千、假動作、催促）都停 1.8 秒，出千那格才不會特別長
   const hold = () => HOLD;  // 2026-11-09 使用者改成三層都一樣長
@@ -390,10 +396,10 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
   // 場景狀態：timeline 播放中的格、否則 hold（開盅後盅一直抬著）或底圖＋眨眼
   const S = { tl: null, hold: null, stake: 0, nextBlink: 0, blinkUntil: 0, flick: [], nextFlick: 0, t0: performance.now() };
-  function play(steps) { // steps: [[frame, ms], ...]
+  function play(steps, exact) { // steps: [[frame, ms], ...]。exact：不受「減少動態效果」影響（押完之後的三個動作、抓千那幾格）
     if (fast()) { const last = steps[steps.length - 1]; return Promise.resolve(); }
     return new Promise((res) => {
-      const tl = { steps: steps.map(([f, d, fn]) => [f, reduced() ? Math.min(d, 150) : d, fn]), t0: performance.now(), res, fired: new Set() };
+      const tl = { steps: steps.map(([f, d, fn]) => [f, reduced() && !exact ? Math.min(d, 150) : d, fn]), t0: performance.now(), res, fired: new Set() };
       if (S.tl) { const r = S.tl.res; S.tl = null; r(); }  // B 版：被新的畫格蓋掉的那段先結束，不然等它的流程會卡死
       S.tl = tl;
       // 保底：分頁在背景時 rAF 停擺，時間到了還是要結束，不然流程卡死
@@ -436,8 +442,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const FLICK_MAX = { double: 480, sag: 450, burst: 1100 };  // 沒出千時的閃法與最長多久（ms）。輕閃太短看不出來，不用
   // 燈暗一段（閃爍不斷）。三層都跟著她喝酒出現，深淺照 FLICK_DEPTH：前兩層淺閃、她只是喝酒；
   // 第三層最暗，她在這段時間伸右手，沒出千的把也會這樣閃（假動作）
-  function longFlick(dur, delay = 0) {
-    const now = performance.now(), t0 = now + delay, dk = FLICK_DEPTH[layer] || 1; let t = t0; const seq = [];
+  function longFlick(dur, delay = 0, depth) {
+    const now = performance.now(), t0 = now + delay, dk = depth || FLICK_DEPTH[layer] || 1; let t = t0; const seq = [];
+    S.flickDepth = dk;
     while (t < t0 + dur) { const d = 60 + Math.random() * 90; seq.push([t, t + d, (0.45 + Math.random() * 0.25) * dk]); t += d; if (Math.random() < 0.25) t += 30 + Math.random() * 40; }
     S.flick = seq; lampSound(seq, now);
   }
@@ -516,7 +523,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     ctx.drawImage(f, 0, 0, W, H);
     // 燈閃在 B 版是線索，不能因為「減少動態效果」就關掉：那時改成整段穩定變暗，不一閃一閃
     let lv = flickerLevel(now);
-    const dk = FLICK_DEPTH[layer] || 1;
+    const dk = S.flickDepth || FLICK_DEPTH[layer] || 1;  // 這一次閃多深（longFlick 記的）：第二層沒喝酒的動作比喝酒淺
     if (reduced() && S.flick.length && now >= S.flick[0][0] && now < S.flick[S.flick.length - 1][1]) lv = 0.55 * dk;
     if (S.stake > 0) {  // 桌上押的那疊：先畫一塊貼桌的影子，不然會飄。畫在變暗之前，燈暗時籌碼跟著暗
       const sx = W / 2 + 6, sy = H - 26;
@@ -873,10 +880,10 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   async function act(key, steps, alive) {
     const cam = layer === 1 && !fast() && ZOOM_RECT[key];
     if (cam) {
-      setZoom(1, false, ZOOM_RECT[key], 400); await wait(400);
+      setZoom(1, false, ZOOM_RECT[key], 400); await waitExact(400);
       if (!alive()) { if (!S.camLock) setZoom(0, false, null, 500); return; }  // 推近途中你已經按了：動作不播，不然會蓋掉抓千那幾格、卡住
     }
-    await play(steps);
+    await play(steps, true);
     if (cam && !S.camLock) setZoom(0, false, null, 500);  // camLock：抓千那一下鏡頭由 grab 自己拉回，這裡不要重拉一次
   }
   async function runTells(planned, seq, honest) {
@@ -885,19 +892,23 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
     for (let k = 0; k < planned.length; k++) {
       const t = planned[k];
-      await wait(k === 0 ? firstAt : 500 + Math.random() * 700);
+      await waitExact(k === 0 ? firstAt : 500 + Math.random() * 700);
       if (!alive()) return;
       if (t === "cheat") {
         // 右手伸過去（a）→ 側面扶盅（b，抓千要按在這一格）→ 收回（a）。第三層整段燈都在閃
         G.shownTells.push("cheat");
         if (layer === 1) G.cheatState = "zoom";  // 第一層：鏡頭一開始推近就算她動手了，推近、扶盅、拉回這整段抓都算成功（半抓）
         if (layer === 3 && !fast()) longFlick(150 + hold() + 250);
-        if (layer < 3)  // 第一、二層：舉手比劃掩護，右手伸過去扶盅（舊的比劃版兩格）。第一層推近用比劃的框，右手在框外
-          await act("chat", [["cheatw-a", 150, () => { G.cheatState = "reach"; }], ["cheatw-b", CHEAT_HOLD, () => { G.cheatState = "on"; sayNext(); }], ["cheatw-a", 150, () => { G.cheatState = "done"; }]], alive);
+        if (layer < 3) {  // 第一、二層：舉手比劃掩護，右手伸過去扶盅（舊的比劃版兩格）。第一層推近用比劃的框，右手在框外
+          const reach = layer === 2 ? L2_REACH : 150, on = layer === 2 ? L2_HOLD : CHEAT_HOLD;
+          if (layer === 2 && !fast()) longFlick(reach * 2 + on + 100, 0, FLICK_SOFT);  // 第二層：出千跟其他沒喝酒的動作一樣淺閃，不然不閃的那個就是出千
+          await act("chat", [["cheatw-a", reach, () => { G.cheatState = "reach"; }], ["cheatw-b", on, () => { G.cheatState = "on"; sayNext(); }], ["cheatw-a", reach, () => { G.cheatState = "done"; }]], alive);
+        }
         else  // 第三層：拿起台啤（tell-drink-a）→ 喝、右手伸過去（cheat-a）→ 扶盅（cheat-b）→ 收回 → 放下台啤。過渡格各 75 ms，總長跟其他動作一樣
           await act("cheat", [["tell-drink-a", 75], ["cheat-a", 75, () => { G.cheatState = "reach"; }], ["cheat-b", hold(), () => { G.cheatState = "on"; sayNext(); }], ["cheat-a", 75, () => { G.cheatState = "done"; }], ["tell-drink-a", 75]], alive);
         G.cheatState = "done"; G.cheatEndAt = performance.now();
       } else {
+        if (layer === 2 && t !== "drink" && !fast()) longFlick(150 + hold() + 250, 0, FLICK_SOFT);  // 第二層：沒喝酒的動作也淺閃
         if (t === "drink" && !fast()) longFlick(150 + hold() + 250, layer === 1 ? 400 : 0);  // 喝酒假動作：燈會閃、右手不動。前兩層淺閃（她從頭就在鋪「這燈老是閃」），第三層跟出千一樣暗。第一層鏡頭要先推近 0.4 秒，燈等她拿起台啤才閃
         G.shownTells.push(t);
         await act(t, [[`tell-${t}-a`, 150], [`tell-${t}-b`, hold(), sayNext], [`tell-${t}-a`, 150]], alive);
@@ -968,7 +979,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); ding(); showTitleCard([{ c: "result", head, res, cls: G.rclass, step: G.revealStep }, ...c]); }
       // 第三層抓到她（2026-11-09 使用者定）：結算不淡掉，留成一張卡，點一下直接接破關的結局選項卡
       // 格式跟前兩張換層卡一樣：右上 3/3、結算寫從她桌上收來的籌碼、下面接心聲（2026-11-09 使用者定）
-      else if (G.over === "win" && G.winBy === "catch" && !fast()) showTitleCard([{ c: "result", head: "抓到了", res: `+${G.him}`, cls: "win", step: "3/3" }, "（這次她來不及收手了。）", "（每次燈閃，她都在喝酒……那罐台啤有問題。）"], endCard);
+      else if (G.over === "win" && G.winBy === "catch" && !fast()) showTitleCard([{ c: "result", head: "抓到了", res: `+${G.him}`, cls: "win", step: "3/3" }, "（這次她來不及收手了。）", "（每次燈整個暗下來，她都在喝酒……那罐台啤有問題。）"], endCard);
       else showResultPop();
     };
     G.pendingSettle = settle;
@@ -1103,7 +1114,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       // 2026-11-10 使用者同意：字卡說「右手？我一直盯著她的左手」，但原本畫面從沒演過右手扶盅（推近的鏡頭只框到臉和舉起來的左手，
       // 抓的那一格她兩手又平放在桌上）。現在鏡頭 0.4 秒拉回全景，在「左手比劃、右手扶盅」那一格再停 0.8 秒，你的手才按上去
       S.camLock = true; setZoom(0, false, null, 400);
-      await play([["cheatw-b", 1200], ["hand-grab", 500, () => synth("thud")]]);
+      await play([["cheatw-b", 1200], ["hand-grab", 500, () => synth("thud")]], true);
     } else await play([["hand-grab", 500]]);
     if (kind === "catch") {
       S.hold = "hand-grab-caught"; shameLater(); sfx("grab", 0.7); sfx("vCaught", 0.8);
