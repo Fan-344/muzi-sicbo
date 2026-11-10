@@ -126,6 +126,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .titlecard.storycard .tcstep { top: max(12px, env(safe-area-inset-top, 0px)); right: 16px; z-index: 1; }
 .titlecard .tcres { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 12px; border-bottom: 1px solid var(--brass-dim); }  /* 換層那把的結算，放在字卡最上面 */
 .titlecard .tcres b { font: 900 1.9rem/1.15 var(--display); color: var(--ink); letter-spacing: .08em; }
+.titlecard .tcres b.long { font-size: 1.5rem; line-height: 1.3; text-align: center; white-space: pre-line; }  /* 換層字卡的兩行大字（2026-11-10），在逗號後換行 */
 .titlecard .tcres span { font: 900 1.3rem/1.2 var(--display); }
 .titlecard .tcres.win span { color: var(--win); } .titlecard .tcres.lose span { color: var(--red); }
 .titlecard p.act { color: var(--muted); font: 400 .9rem/1.65 var(--body); }
@@ -235,7 +236,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 沒出千時也會喝酒、比劃（假動作）。TELLS 是前兩層（和說明、催促）會出現的普通動作
   const TELLS = ["cup", "hair", "lean", "call", "neck"];  // neck 玩項鍊（2026-11-09 新增，不舉手：左手到胸口勾金鍊子）  // call 招手（2026-11-09 新增假動作：舉左手跟別桌打招呼、看向旁邊；跟出千的比劃不同）
   // 第一層不演「手搭盅」（2026-11-10 使用者同意）：第一層畫面上她動的全是左手，右手從頭到尾沒離開桌面，
-  // 被抓那一下才第一次看到右手在盅上，字卡「她是故意讓我看左手的」才有依據。第二層照舊有手搭盅
+  // 被抓那一下才第一次看到右手在盅上，字卡「她左手一舉，右手就已經在盅上了」才有依據。第二層照舊有手搭盅
   const tellsNow = () => layer === 1 ? TELLS.filter((t) => t !== "cup") : TELLS;
   const L12_POOL = [...TELLS, "drink"];  // 前兩層的假動作：多一個喝酒（燈淺閃、右手不動；2026-11-10 使用者定）
   const L3_POOL = ["hair", "lean", "chat", "drink", "call", "neck"];  // 第三層的假動作：沒有一個會碰骰盅
@@ -976,7 +977,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       G.pendingSettle = null;
       S.purseHold = null; S.stake = 0; render();
       // 換層那把（2026-11-09 使用者定）：結算跟換層的心聲放同一張字卡，不另跳彈窗
-      if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); ding(); showTitleCard([{ c: "result", head, res, cls: G.rclass, step: G.revealStep }, ...c]); }
+      if (G.revealCard) { const c = G.revealCard; G.revealCard = null; const { head, res } = resultText(); ding(); showTitleCard([{ c: "result", head: G.revealHead || head, res, cls: G.rclass, step: G.revealStep }, ...c]); G.revealHead = null; }
       // 第三層抓到她（2026-11-09 使用者定）：結算不淡掉，留成一張卡，點一下直接接破關的結局選項卡
       // 格式跟前兩張換層卡一樣：右上 3/3、結算寫從她桌上收來的籌碼、下面接心聲（2026-11-09 使用者定）
       else if (G.over === "win" && G.winBy === "catch" && !fast()) showTitleCard([{ c: "result", head: "抓到了", res: `+${G.him}`, cls: "win", step: "3/3" }, "（這次她來不及收手了。）", "（每次燈整個暗下來，她都在喝酒……那罐台啤有問題。）"], endCard);
@@ -991,7 +992,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 字卡一行：字串＝心聲；act＝旁白；line＝木子說的；you＝你說的（後兩種前面標名字）
   const cardLine = (x) => typeof x === "string" ? el("p", {}, x)
     : x.c === "hint" ? el("button", { class: "hintbtn", onclick: (e) => { e.stopPropagation(); e.currentTarget.replaceWith(el("div", { class: "hintbox" }, ...x.t.map((t) => el("p", {}, t)))); } }, "提示")
-    : x.c === "result" ? el("div", { class: "tcres " + (x.cls || "") }, x.step ? el("i", { class: "tcstep" }, x.step) : null, el("b", {}, x.head), el("span", {}, x.res))
+    : x.c === "result" ? el("div", { class: "tcres " + (x.cls || "") }, x.step ? el("i", { class: "tcstep" }, x.step) : null, el("b", { class: x.head.includes("\n") ? "long" : "" }, x.head), el("span", {}, x.res))
     : x.c === "line" || x.c === "you" ? el("p", { class: x.c }, el("span", { class: "spk" }, x.c === "you" ? "你" : "木子"), x.t)
     : el("p", { class: x.c }, x.t);
   const cardImg = (name) => name ? el("img", { class: "tcimg", src: IMG + name + ".webp", alt: "" }) : null;
@@ -1111,7 +1112,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     else if (st === "on") kind = layer === 3 ? "catch" : "seen";
     else kind = "half";
     if (showHand) {
-      // 2026-11-10 使用者同意：字卡說「右手？我一直盯著她的左手」，但原本畫面從沒演過右手扶盅（推近的鏡頭只框到臉和舉起來的左手，
+      // 2026-11-10 使用者同意：字卡講她右手在盅上（當時的字是「右手？我一直盯著她的左手」，後來換了），但原本畫面從沒演過右手扶盅（推近的鏡頭只框到臉和舉起來的左手，
       // 抓的那一格她兩手又平放在桌上）。現在鏡頭 0.4 秒拉回全景，在「左手比劃、右手扶盅」那一格再停 0.8 秒，你的手才按上去
       S.camLock = true; setZoom(0, false, null, 400);
       await play([["cheatw-b", 1200], ["hand-grab", 500, () => synth("thud")]], true);
@@ -1138,6 +1139,8 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       G.lines.push({ c: "line", t: "你按住她扶著骰盅的右手，她指尖卻先一步縮了回去，順勢把盅掀開。骰子沒被動過。" });
       G.lines.push({ c: "line", t: "「……手放開。」" });
       G.revealStep = "2/3";
+      // 2026-11-10 使用者定：字卡最上面的大字不只寫「看穿了」，講清楚這次抓對了、但她跑掉了（下面的彈窗、結果列照舊寫「看穿了」）
+      G.revealHead = "成功抓到了，\n但這次被她跑了";
       G.revealCard = ["（差一點。我按住的前一刻，她收手了。骰子沒翻成，什麼證據都沒抓到。）", "（左手吸引注意這招被我看穿了，她一定會改掉。）", "（她會換個辦法下手，還會故意亂動騙我出手。抓錯一次，我就得滾了。）"];
     } else if (kind === "half") {
       // 慢了一步：她已經翻完收手。第一層的話，鏡頭在這時候拉開，第一次看到右手
@@ -1165,7 +1168,11 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       }
       // 第一次：兩句心聲改成字卡，等結果彈窗消失後跳出來（交代第二層起鏡頭為什麼不再推近）
       if (firstReveal) G.revealStep = "1/3";
-      if (firstReveal) G.revealCard = ["（右手？我一直盯著她的左手……）", "（她是故意讓我看左手的。下次不能再被她牽著鼻子走。）"];
+      // 2026-11-10 使用者定：字卡最上面的大字不只寫「慢了一步」（跟第二、三層趕出去的「慢了一步」同字），講清楚這次是發現破綻了
+      if (firstReveal) G.revealHead = "發現破綻了，\n但慢了一步";
+      // 2026-11-10 使用者選的寫法（原本是「右手？我一直盯著她的左手……」「她是故意讓我看左手的。下次不能再被她牽著鼻子走。」）：
+      // 改成講時機，直接接第二層的拼手速（扶盅那 0.8 秒才算抓到）
+      if (firstReveal) G.revealCard = ["（慢了。她左手一舉，右手就已經在盅上了。）", "（下次她再舉手，我要在她右手碰到盅的那一下按住。）"];
     } else {
       S.hold = "expr-angry"; synth("slap", 0.8); sfx("vAngry", 0.7);
       RUN.kicked[L0][G.cheated ? "early" : "wrong"] += 1;
