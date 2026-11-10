@@ -234,6 +234,9 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 2026-11-09 第三版：第一、二層出千用舉手比劃，而且只有出千才舉手（只有真比劃）；第三層出千用喝酒＋燈閃，
   // 沒出千時也會喝酒、比劃（假動作）。TELLS 是前兩層（和說明、催促）會出現的普通動作
   const TELLS = ["cup", "hair", "lean", "call", "neck"];  // neck 玩項鍊（2026-11-09 新增，不舉手：左手到胸口勾金鍊子）  // call 招手（2026-11-09 新增假動作：舉左手跟別桌打招呼、看向旁邊；跟出千的比劃不同）
+  // 第一層不演「手搭盅」（2026-11-10 使用者同意）：第一層畫面上她動的全是左手，右手從頭到尾沒離開桌面，
+  // 被抓那一下才第一次看到右手在盅上，字卡「她是故意讓我看左手的」才有依據。第二層照舊有手搭盅
+  const tellsNow = () => layer === 1 ? TELLS.filter((t) => t !== "cup") : TELLS;
   const L12_POOL = [...TELLS, "drink"];  // 前兩層的假動作：多一個喝酒（燈淺閃、右手不動；2026-11-10 使用者定）
   const L3_POOL = ["hair", "lean", "chat", "drink", "call", "neck"];  // 第三層的假動作：沒有一個會碰骰盅
   const TELL_NAME = { cheat: "比劃", call: "招手", neck: "玩項鍊", cup: "手搭盅", drink: "喝啤酒", hair: "撥頭髮", chat: "聊天", lean: "往後靠" };
@@ -571,33 +574,28 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
   // 開場：她口述規則，一句一句點過去；畫面上同時輪著做五個動作，不標示。
   // 開場說明（2026-11-08 第三版：像投影片，每句配一個畫面狀態 scene）。c: "act" 是旁白（灰字）
+  // 2026-11-10 使用者說說明太冗長：16 頁併成 9 頁。同一件事的幾頁併成一頁（一頁可以放兩句），示範畫面在同一頁裡輪流播；
+  // 拿掉的內容：進場帶幾個籌碼（第一把開頭本來就會講）、「偷看到的那顆開出來變了」那頁（開盅時「被出千」的標記已經在講同一件事）。
+  // 破綻、三個動作、抓千這三頁的字沒動
   const INTRO = [
-    { scene: "table", c: "act", t: "麻將館最裡面那張綠色賭桌，以前是她爸爸在顧。現在坐在莊家位子上的是木子，跟你從小在麻將館後面一起長大的那個女生。" },
-    { scene: "table", t: "「喲，稀客。坐啊。」" },
-    { scene: "dice", t: "「我們玩骰寶。我把三顆骰子放進骰盅裡搖，你猜三顆加起來的點數是大還是小。」" },
-    { scene: "triple", t: "「加起來 4 到 10 點算小，11 到 17 點算大。要是三顆點數一樣，叫做豹子，不管你押大還是押小，都算我贏。」" },
-    { scene: "bet", t: "「每一把你可以押一到三個籌碼。押中了，你押幾個我就賠你幾個；押錯了，你押的籌碼就歸我。」" },
-    { scene: "purse", t: "「進場就是帶 " + START + " 個上桌。把我桌上的 " + HIM + " 個贏光，或當場抓到我出千，桌上的都歸你；你桌上的輸光了，就回家。」" },
-    { scene: "peek", c: "act", t: "木子放下骰盅的那一下，盅底會掀起一條縫。你眼睛快，每把都能偷看到一到兩顆骰子的點數，會用藍色顯示在骰子格裡。" },
-    { scene: "peek2", c: "act", t: "看到的是 4、5、6 這種大點數，押大比較有機會；看到 1、2、3，押小比較有機會。偷看到兩顆的話更好猜。" },
-    { scene: "cheat", c: "act", t: "木子的爸爸教過她一招：在你快要贏的那一把，偷偷把一顆骰子翻面，讓你變成輸。" },
-    { scene: "cheatReveal", c: "act", t: "但你從小在麻將館長大，別人出千瞞不過你的眼睛。開盅時，被她翻過的那顆你一定認得出來，會標上「被出千」。" },
-    { scene: "mismatch", c: "act", t: "你偷看到的那顆，開出來要是變了，也是她動的手。只是等到開盅才發現，那一把已經輸了。" },
-    // 2026-11-10 使用者定：試玩的人分不出要看「同一個動作的細微變化」還是「某一個固定動作」→ 這頁改成主角心聲，講題型不講答案
+    { scene: "table", t: [{ c: "act", t: "麻將館最裡面那張綠色賭桌，以前是她爸爸在顧。現在坐在莊家位子上的是木子，跟你從小在麻將館後面一起長大的那個女生。" }, "「喲，稀客。坐啊。」"] },
+    { scene: "dice", t: "「我們玩骰寶：我搖三顆骰子，你猜加起來是大還是小。4 到 10 點算小，11 到 17 點算大；三顆一樣叫豹子，押大押小都算我贏。」" },
+    { scene: "bet", t: ["「每一把押一到三個籌碼。押中了，押幾個我賠幾個；押錯了，歸我。」", "「把我桌上的 " + HIM + " 個贏光，或當場抓到我出千，桌上的都歸你。你輸光了，就回家。」"] },
+    { scene: "peek", c: "act", t: "木子放下骰盅的那一下，盅底會掀起一條縫，你每把都能偷看到一到兩顆，會用藍色顯示。看到 4、5、6，押大比較有機會；看到 1、2、3，押小比較有機會。" },
+    { scene: "cheat", c: "act", t: ["木子的爸爸教過她一招：在你快要贏的那一把，偷偷把一顆骰子翻面，讓你變成輸。", "開盅時，被她翻過的那顆你一定認得出來，會標上「被出千」。只是等到開盅才發現，那一把已經輸了。"] },
     { scene: "tell", c: "mind", t: ["（她的小動作我從小看到大，就那幾個，每次都一樣。）", "（其中有一個，她只有動手的時候才會做。）"] },
     { scene: "watch", c: "act", t: "押完之後，她會做三個動作，順序每次都不一樣，這段時間畫面外框會一閃一閃。三個動作做完就來不及抓了，她會直接開盅。" },
     { scene: "grab", c: "act", t: "看準她動手的那一下，按『抓對手出千』，當場按住她的手。她還沒動就抓、或是她根本沒動，都算你抓錯；她已經收手了才抓，就是慢了一步。" },
-    { scene: "grab", t: "「想抓我？抓到了，今天算你贏；抓錯了，你桌上的錢全部留下，人給我出去。」" },
-    { scene: "start", t: "「好了，來吧。」" },
+    { scene: "start", t: ["「想抓我？抓到了，今天算你贏；抓錯了，你桌上的錢全部留下，人給我出去。」", "「好了，來吧。」"] },
   ];
   const introLine = (x) => typeof x === "string" ? { c: "line", t: x } : { c: x.c || "line", t: x.t };
-  const introLines = (x) => Array.isArray(x.t) ? x.t.map((t) => ({ c: x.c || "line", t })) : [introLine(x)];  // 一頁可以放好幾句（t 給陣列）
+  const introLines = (x) => Array.isArray(x.t) ? x.t.map((t) => typeof t === "string" ? { c: x.c || "line", t } : { c: t.c || x.c || "line", t: t.t }) : [introLine(x)];  // 一頁可以放好幾句（t 給陣列）
   // 第二次以後：她每 6–9 秒做一個動作、配一句催促或嗆人的話，直到你坐下
   const INTRO_AGAIN = ["「又來了喔。坐。」"];
   const NAG = [["lean", "「怕了？」"], ["chat", "「坐啊，我不咬人。」"], ["hair", "「我沒時間等你想。」"], ["cup", "「要賭就快。」"], ["lean", "「你爸不會這樣磨蹭。」"]];
   async function introNag(seq) {
     const alive = () => G.phase === "intro" && G.tellSeq === seq;
-    const order = NAG.filter(([t]) => layer === 3 ? t !== "cup" : TELLS.includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 前兩層開場也不舉手
+    const order = NAG.filter(([t]) => layer === 3 ? t !== "cup" : tellsNow().includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 前兩層開場也不舉手
     while (alive()) {
       await wait(6000 + Math.random() * 3000);
       if (!alive()) return;
@@ -610,7 +608,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   // 說明時一句話配一個動作：按 ▶ 換句時做一次，之後待機到下一句。五個動作洗牌輪，不重複
   let introOrder = [];
   function introTell() {
-    if (!introOrder.length) introOrder = TELLS.slice().sort(() => Math.random() - 0.5);
+    if (!introOrder.length) introOrder = tellsNow().slice().sort(() => Math.random() - 0.5);
     const t = introOrder.pop();
     play([["tell-" + t + "-a", 150], ["tell-" + t + "-b", HOLD, null], ["tell-" + t + "-a", 150]]);
   }
@@ -620,16 +618,12 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const SLIDE = {
     table: ["木子的骰寶桌", "麻將館最裡面那張綠桌"],
     dice: ["大小怎麼算", "三顆加起來：4–10 小，11–17 大"],
-    triple: ["豹子", "三顆一樣，不管押大押小都算莊家贏"],
     peek: ["偷看", "藍色的是你偷看到的點數"],
-    peek2: ["偷看", "看到 1 和 2，押小比較有機會"],
-    cheatReveal: ["你的眼睛", "被翻過的那顆，你一定認得出來"],
-    mismatch: ["對不上", "偷看到 5，開出來是 3：她動了手"],
     cheat: ["她的手法", "在你快贏的那把，偷翻一顆"],
     tell: ["破綻", "有一個動作，她動手時才會做"],
     watch: ["三個動作", "做完就不能抓，她直接開盅"],
   };
-  const TELL_SCENES = new Set(["table", "dice", "triple", "bet", "purse", "peek", "peek2", "mismatch", "start"]);  // 這些頁照舊一句配一個動作
+  const TELL_SCENES = new Set(["table", "dice", "bet", "peek", "start"]);  // 這些頁照舊一句配一個動作
   const tutAlive = (tok) => G.phase === "intro" && G.tutTok === tok;
   function tutLoop(tok, ms, fn) { const go = () => { if (!tutAlive(tok)) return; fn(); setTimeout(go, ms); }; setTimeout(go, ms); }
   function enterStep(i) {
@@ -638,29 +632,25 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     stopTells(); S.hold = null;
     G.demo = { scene: sc, dice: null, heard: -1, marks: {}, badge: "", hl: {} };
     const D = G.demo;
-    if (sc === "dice") {
-      const ex = [[[3, 5, 6], "14 點　大"], [[1, 2, 4], "7 點　小"]]; let k = 0;
-      D.dice = ex[0][0]; D.badge = ex[0][1];
-      tutLoop(tok, 1800, () => { k = 1 - k; D.dice = ex[k][0]; D.badge = ex[k][1]; render(); });
-    } else if (sc === "triple") { D.dice = [4, 4, 4]; D.badge = "豹子　莊家贏"; }
-    else if (sc === "bet") D.hl.panel = true;
-    else if (sc === "purse") D.hl.purse = true;
-    else if (sc === "peek") { D.dice = [null, 5, null]; D.heard = [1]; }
-    else if (sc === "peek2") { D.dice = [1, 2, null]; D.heard = [0, 1]; }
-    else if (sc === "mismatch") {
-      const show = () => { D.dice = [2, 5, 6]; D.marks = {}; D.flipAt = 0; render(); };
-      const flip = () => { D.dice = [2, 3, 6]; D.marks = { 1: "cheatmark" }; D.flipAt = performance.now(); render(); };
-      D.dice = [2, 5, 6]; setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300);
-      tutLoop(tok, 3600, () => { show(); setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300); });
+    if (sc === "dice") {  // 大、小、豹子三個例子輪流播，卡片的小字跟著換
+      const ex = [[[3, 5, 6], "14 點　大", ""], [[1, 2, 4], "7 點　小", ""], [[4, 4, 4], "豹子　莊家贏", "三顆一樣是豹子，押大押小都算莊家贏"]]; let k = 0;
+      const set = () => { D.dice = ex[k][0]; D.badge = ex[k][1]; D.sub = ex[k][2]; };
+      set(); tutLoop(tok, 1800, () => { k = (k + 1) % ex.length; set(); render(); });
     }
-    else if (sc === "cheat" || sc === "cheatReveal") {
-      const show = () => { D.dice = [4, 5, 3]; D.marks = {}; D.badge = "12 點　大"; D.flipAt = 0; render(); };
-      const flip = () => { D.dice = [4, 5, 1]; D.marks = { 2: "cheatmark" }; D.badge = "10 點　小"; D.flipAt = performance.now(); render(); };
+    else if (sc === "bet") { D.hl.panel = true; D.hl.purse = true; }  // 押注按鈕和兩邊的籌碼一起亮
+    else if (sc === "peek") {  // 偷看到一顆、偷看到兩顆輪流播
+      const ex = [[[null, 5, null], [1], "看到 5，押大比較有機會"], [[1, 2, null], [0, 1], "看到 1 和 2，押小比較有機會"]]; let k = 0;
+      const set = () => { D.dice = ex[k][0]; D.heard = ex[k][1]; D.sub = ex[k][2]; };
+      set(); tutLoop(tok, 2600, () => { k = 1 - k; set(); render(); });
+    }
+    else if (sc === "cheat") {
+      const show = () => { D.dice = [4, 5, 3]; D.marks = {}; D.badge = "12 點　大"; D.sub = ""; D.flipAt = 0; render(); };
+      const flip = () => { D.dice = [4, 5, 1]; D.marks = { 2: "cheatmark" }; D.badge = "10 點　小"; D.sub = "被翻過的那顆，你一定認得出來"; D.flipAt = performance.now(); render(); };
       show(); setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300);
       tutLoop(tok, 3600, () => { show(); setTimeout(() => { if (tutAlive(tok)) flip(); }, 1300); });
     } else if (sc === "tell" || sc === "watch") {
       D.hl.scene = sc === "tell";  // watch 頁用外框閃爍，不用亮框
-      const order = TELLS.slice().sort(() => Math.random() - 0.5); let k = 0;  // 原本被寫進上一行的註解裡，說明頁播動作會出錯
+      const order = tellsNow().slice().sort(() => Math.random() - 0.5); let k = 0;  // 原本被寫進上一行的註解裡，說明頁播動作會出錯
       const one = () => { const t = order[k++ % order.length]; play([["tell-" + t + "-a", 150], ["tell-" + t + "-b", HOLD, null], ["tell-" + t + "-a", 150]]); };
       setTimeout(() => { if (tutAlive(tok)) one(); }, 400); tutLoop(tok, 2000, one);
     } else if (sc === "grab") {
@@ -703,8 +693,6 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
       const amt = el("div", { class: "amt" }); [1, 2, 3].forEach((n) => amt.append(el("button", { class: n === 1 ? "on" : "", tabindex: "-1" }, n === 1 ? "押 1 個" : `${n} 個`)));
       p.append(amt, el("div", { class: "bs" }, el("button", { tabindex: "-1" }, el("b", {}, "小"), el("small", {}, "4–10")), el("button", { tabindex: "-1" }, el("b", {}, "大"), el("small", {}, "11–17"))));
       if (D.hl.panel) p.classList.add("hl");
-    } else if (sc === "purse") {
-      p.append(slideCard("怎麼贏", `贏光她桌上的 ${HIM} 個，或當場抓到她出千`));
     } else if (sc === "grab") {
       p.append(el("div", { class: "moves one" },  // 2026-11-09：拿掉「直接開」，動作時只能抓千
         el("button", { class: "mv grab hl", tabindex: "-1" }, el("b", {}, "抓對手出千"))));
@@ -719,7 +707,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
         el("div", { id: "demomarker", class: "marker" })));
       p.append(el("span", { class: "label legend" + (D.hl.legend ? " hl" : "") }, "綠：換成功　黃：沒換到，照開　紅：被抓"));
       p.append(el("span", { class: "label legend" }, sc === "swapHard" ? "換第三次：光點更快、綠色更窄" : "按「動手」讓光點停下"));
-    } else if (SLIDE[sc]) p.append(slideCard(SLIDE[sc][0], SLIDE[sc][1]));
+    } else if (SLIDE[sc]) p.append(slideCard(SLIDE[sc][0], D.sub || SLIDE[sc][1]));
   }
 
   function startIntro(force) {
@@ -761,7 +749,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     if (G.susp >= 0.6) return pick(["「手放桌上。」", "「我在看你喔。」"]);
     if (G.susp >= 0.3) return pick(["「你今天手很巧喔。」", "「嗯？」"]);
     if (G.caution > 0) return "「規規矩矩來。」";
-    return pick(["「來，押。」", "「大還小？」", "「快點啦。」", gamesPlayed > 0 ? "「又來了喔。」" : "「坐。」"]);
+    return pick(["「來，押。」", "「大還小？」", "「快點啦。」", G.round === 1 && gamesPlayed > 0 ? "「又來了喔。」" : "「押幾個？」"]);  // 2026-11-10：原本第一場每把都可能講「坐。」，人早就坐下了
   }
 
   // ---------- 一把的流程 ----------
@@ -786,7 +774,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     G.amt = Math.min(G.amt, maxAmt());
     G.lines = [{ c: "line", t: attitude() }];
     if (G.buyLine) { G.lines.unshift(G.buyLine); G.buyLine = null; }  // 這場第一把：先交代付了入場費、帶多少上桌
-    G.diceState = "hidden"; S.hold = null; S.stake = 0; S.purseHold = null; G.cheatState = "none";
+    G.diceState = "hidden"; S.hold = null; S.stake = 0; S.purseHold = null; G.cheatState = "none"; G.cheatEndAt = 0; S.camLock = false;
     G.phase = "shake"; render();
     setZoom(0, true);
     const shakes = []; for (let i = 0; i < 8; i++) shakes.push([i % 2 ? "shake-b" : "shake-a", 100]);
@@ -816,7 +804,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   const BET_NAG = [["lean", "「怕了？」"], ["hair", "「我沒時間等你想。」"], ["cup", "「要賭就快。」"], ["lean", "「大還小，想那麼久？」"], ["cup", "「押啊，盅都放好了。」"], ["chat", "「快點啦，我還要顧別桌。」"]];
   async function betNag(round, g0) {
     const alive = () => G === g0 && G.round === round && G.phase === "bet";
-    const order = BET_NAG.filter(([t]) => layer === 3 ? t !== "cup" : TELLS.includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 第三層催你押的時候也不搭盅
+    const order = BET_NAG.filter(([t]) => layer === 3 ? t !== "cup" : tellsNow().includes(t)).sort(() => Math.random() - 0.5); let i = 0;  // 第三層催你押的時候也不搭盅
     while (alive() && !fast()) {
       await wait(6000 + Math.random() * 3000);
       if (!alive()) return;
@@ -841,7 +829,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     // 每把固定三個動作，順序隨機；出千那把，出千隨機排在三格裡的其中一格，另外兩格是假動作（2026-11-09 使用者定）
     // 第三層（2026-11-10 使用者定）：她的手只在燈暗的時候碰骰盅，其他時候都不碰 → 假動作拿掉「手搭盅」和「喝酒扶盅但燈不閃」。
     // 燈暗有兩種：出千（右手伸到骰盅）和喝酒假動作（右手不動），要在暗的桌面上看出右手有沒有動
-    const pool = layer < 3 ? L12_POOL : L3_POOL;
+    const pool = layer === 1 ? L12_POOL.filter((t) => t !== "cup") : layer === 2 ? L12_POOL : L3_POOL;
     // 三個動作不重複（2026-11-09 使用者定）。喝酒類假動作（喝酒、喝酒扶盅）算同一種，一把最多一個；
     // 出千自成一種：第三層出千那把也可能出現喝酒類假動作（2026-11-09 使用者定）
     const kindOf = (t) => t === "drink" ? "beer" : t;
@@ -877,7 +865,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   }
   // 假動作：第一層左手撥頭髮；第二層右手搭盅；第三層燈閃時不動右手（不放手搭盅，免得跟真的混）。喝酒（燈閃、右手不動）三層都會出現
   function fakeFirst() {
-    if (layer === 1) return Math.random() < 0.6 ? "hair" : pick(TELLS);  // 左手的假動作：撥頭髮（前兩層不舉手：舉手只給出千）
+    if (layer === 1) return Math.random() < 0.6 ? "hair" : pick(tellsNow());  // 左手的假動作：撥頭髮（前兩層不舉手：舉手只給出千）
     if (layer === 2) return Math.random() < 0.5 ? "cup" : pick(TELLS);
     return pick(L3_POOL);  // 第三層：沒出千也會喝酒（燈暗、右手不動）、比劃
   }
@@ -886,10 +874,10 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     const cam = layer === 1 && !fast() && ZOOM_RECT[key];
     if (cam) {
       setZoom(1, false, ZOOM_RECT[key], 400); await wait(400);
-      if (!alive()) { setZoom(0, false, null, 500); return; }  // 推近途中你已經按了：動作不播，不然會蓋掉抓千那幾格、卡住
+      if (!alive()) { if (!S.camLock) setZoom(0, false, null, 500); return; }  // 推近途中你已經按了：動作不播，不然會蓋掉抓千那幾格、卡住
     }
     await play(steps);
-    if (cam) setZoom(0, false, null, 500);
+    if (cam && !S.camLock) setZoom(0, false, null, 500);  // camLock：抓千那一下鏡頭由 grab 自己拉回，這裡不要重拉一次
   }
   async function runTells(planned, seq, honest) {
     const alive = () => G.phase === "open" && G.tellSeq === seq;
@@ -908,7 +896,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
           await act("chat", [["cheatw-a", 150, () => { G.cheatState = "reach"; }], ["cheatw-b", CHEAT_HOLD, () => { G.cheatState = "on"; sayNext(); }], ["cheatw-a", 150, () => { G.cheatState = "done"; }]], alive);
         else  // 第三層：拿起台啤（tell-drink-a）→ 喝、右手伸過去（cheat-a）→ 扶盅（cheat-b）→ 收回 → 放下台啤。過渡格各 75 ms，總長跟其他動作一樣
           await act("cheat", [["tell-drink-a", 75], ["cheat-a", 75, () => { G.cheatState = "reach"; }], ["cheat-b", hold(), () => { G.cheatState = "on"; sayNext(); }], ["cheat-a", 75, () => { G.cheatState = "done"; }], ["tell-drink-a", 75]], alive);
-        G.cheatState = "done";
+        G.cheatState = "done"; G.cheatEndAt = performance.now();
       } else {
         if (t === "drink" && !fast()) longFlick(150 + hold() + 250, layer === 1 ? 400 : 0);  // 喝酒假動作：燈會閃、右手不動。前兩層淺閃（她從頭就在鋪「這燈老是閃」），第三層跟出千一樣暗。第一層鏡頭要先推近 0.4 秒，燈等她拿起台啤才閃
         G.shownTells.push(t);
@@ -1065,7 +1053,7 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
   const BET_CALM = ["（還沒押，她不會動骰子。）", "（盅才剛放下，這時候動手太明顯了。）"];
   const SWITCH_HINTS = ["（她把手收回去，坐姿也換了。她變謹慎了，下一把的小動作大概不一樣。）", "（她盯著自己的手看了一下。這招被我看穿，她會換別的習慣。）", "（她的眼神變了。接下來她會更小心，破綻也會換一個。）"];
-  const CAUGHT_LINES = ["（那顆骰子停的位置不對，像是被按過……她絕對出千了。）", "（有一顆怪怪的，被翻過了……她出千。）", "（剛剛那一下，她的手指碰了盅裡的骰子……騙不了我。）"];
+  const CAUGHT_LINES = ["（那顆骰子停的位置不對，像是被按過……她絕對出千了。）", "（有一顆怪怪的，被翻過了……她出千。）", "（這一顆剛剛不是這一面……騙不了我。）"];
   async function openCup() {
     if (G.phase !== "open") return;
     stopTells();
@@ -1098,10 +1086,12 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   async function grab() {
     if (G.phase !== "open" || G.actsDone) return;  // 三個動作做完就不能抓了
     const st = G.cheated ? G.cheatState : "none"; const L0 = layer;
+    // 第一層、她出千的動作還在演（或剛收手、鏡頭還在拉回）：抓的那一下先拉回全景，停在右手扶盅那一格
+    const showHand = layer === 1 && G.cheated && st !== "before" && (st !== "done" || !G.cheatEndAt || performance.now() - G.cheatEndAt < 600);
     stopTells();
     G.act = "抓千"; G.phase = "reveal"; S.purseHold = { you: G.you, him: G.him }; render();  // 籌碼先不動，跟彈窗同一拍才變
     const a = G.bet.amt;
-    synth("thud");
+    if (!showHand) synth("thud");
     // 判定（2026-11-09 定）：沒出千、或她還沒動就抓＝抓錯；第一層出千那把，從鏡頭推近開始一律半抓；
     // 第二、三層：右手伸過去還沒扶到＝太早（抓錯）、扶盅那一格＝抓到（第二層是看穿、進第三層）、收手之後＝慢了（趕出去）
     let kind;
@@ -1109,7 +1099,12 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     else if (layer === 1) kind = "half";
     else if (st === "on") kind = layer === 3 ? "catch" : "seen";
     else kind = "half";
-    await play([["hand-grab", 500]]);
+    if (showHand) {
+      // 2026-11-10 使用者同意：字卡說「右手？我一直盯著她的左手」，但原本畫面從沒演過右手扶盅（推近的鏡頭只框到臉和舉起來的左手，
+      // 抓的那一格她兩手又平放在桌上）。現在鏡頭 0.4 秒拉回全景，在「左手比劃、右手扶盅」那一格再停 0.8 秒，你的手才按上去
+      S.camLock = true; setZoom(0, false, null, 400);
+      await play([["cheatw-b", 1200], ["hand-grab", 500, () => synth("thud")]]);
+    } else await play([["hand-grab", 500]]);
     if (kind === "catch") {
       S.hold = "hand-grab-caught"; shameLater(); sfx("grab", 0.7); sfx("vCaught", 0.8);
       if (G.orig) G.dice = G.orig.slice();  // 當場按住，那顆還沒翻成
